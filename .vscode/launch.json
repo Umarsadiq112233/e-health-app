@@ -1,0 +1,8 @@
+{
+  "version": "0.2.0",
+  "configurations": [{
+    "name": "E-Health (Supabase)", "request": "launch", "type": "dart",
+    "program": "lib/main.dart",
+    "toolArgs": ["--dart-define-from-file=config/supabase.json"]
+  }]
+}

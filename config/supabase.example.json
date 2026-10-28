@@ -1,0 +1,5 @@
+{
+  "SUPABASE_URL": "https://agigsbwjaupsfvhcnseg.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "",
+  "AUTH_REDIRECT_URL": "io.ehealth.app://auth-callback"
+}

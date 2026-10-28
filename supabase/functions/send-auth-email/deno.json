@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true
+  },
+  "tasks": {
+    "check": "deno check index.ts handler_test.ts",
+    "test": "deno test handler_test.ts"
+  },
+  "nodeModulesDir": "none",
+  "imports": {
+    "standardwebhooks": "npm:standardwebhooks@1.0.0"
+  }
+}

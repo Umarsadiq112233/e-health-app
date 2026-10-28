@@ -1,0 +1,30 @@
+project_id = "e-health-app"
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["io.ehealth.app://auth-callback"]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+double_confirm_changes = true
+max_frequency = "1m"
+otp_length = 6
+otp_expiry = 3600
+
+# Only the signed Auth webhook may call this endpoint. Handler verifies signature.
+[functions.send-auth-email]
+verify_jwt = false
+
+# Food analysis is available only to signed-in app users.
+[functions.analyze-meal]
+verify_jwt = true
+
+# SMTP fallback templates; the enabled HTTP hook renders its own messages.
+[auth.email.template.confirmation]
+subject = "E-Health · Verify your email"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "E-Health · Reset your password"
+content_path = "./supabase/templates/recovery.html"
