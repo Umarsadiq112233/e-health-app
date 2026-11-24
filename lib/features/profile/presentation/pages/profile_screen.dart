@@ -165,9 +165,54 @@ class ProfileScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 14),
+          _panel(_logoutRow(context)),
         ],
       ),
     );
+  }
+
+  Widget _logoutRow(BuildContext context) => InkWell(
+    onTap: () => _confirmLogout(context),
+    child: const Padding(
+      padding: EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.logout, color: Color(0xFFFF6B6B), size: 26),
+          SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Log Out',
+              style: TextStyle(color: Color(0xFFFF6B6B), fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final auth = context.read<AuthBloc?>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log Out?'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && auth != null) {
+      auth.add(AuthSubmitted(AuthAction.signOut));
+    }
   }
 
   Widget _row(
