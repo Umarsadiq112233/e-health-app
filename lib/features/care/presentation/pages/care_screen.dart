@@ -61,7 +61,7 @@ class _CareScreenState extends State<CareScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               children: [
                 BeamTabHeader(
                   title: title,

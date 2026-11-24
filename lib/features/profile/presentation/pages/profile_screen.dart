@@ -7,6 +7,7 @@ import '../widgets/profile_avatar.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/components.dart';
 import '../../../../app/state/app_session_cubit.dart';
+import '../../domain/models/account_profile.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -18,10 +19,11 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = AppSessionCubit.instance;
+    final age = calculateAge(parseBirthDate(session.birthDate));
     return Theme(
       data: beamTheme(context),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
           BeamTabHeader(
             title: 'My Profile',
@@ -76,10 +78,7 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 for (final item in [
                   (Icons.person, session.gender),
-                  (
-                    Icons.cake,
-                    session.birthDate.isEmpty ? 'Age —' : session.birthDate,
-                  ),
+                  (Icons.cake, age == null ? 'Age —' : 'Age $age'),
                   (Icons.monitor_weight, '${session.weight} kg'),
                 ])
                   Expanded(
@@ -284,7 +283,7 @@ class _SettingsState extends State<SettingsScreen> {
           ] else if (widget.title == 'Privacy & Data') ...[
             const InsightCard((
               'Your data belongs to you',
-              'Account details are stored in Supabase. Health cards show only genuine recorded measurements.',
+              'Account details are stored securely in Supabase. Health cards show only genuine recorded measurements.',
               Icons.verified_user_outlined,
               AppColors.green,
             )),

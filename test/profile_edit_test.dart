@@ -56,6 +56,13 @@ void main() {
     );
   });
   tearDown(() => cubit.close());
+  test(
+    'Calculates age from birthday and updates after the birthday passes',
+    () {
+      expect(calculateAge(DateTime(2000, 10, 29), DateTime(2026, 10, 29)), 26);
+      expect(calculateAge(DateTime(2000, 10, 30), DateTime(2026, 10, 29)), 25);
+    },
+  );
   test('Loads persisted fields, preserves drafts on failure, confirms save and restart', () async {
     await cubit.load();
     expect(cubit.state.name, 'Sara');

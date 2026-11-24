@@ -18,7 +18,7 @@ void main() {
     const Size(844, 390),
     const Size(1024, 768),
   ]) {
-    testWidgets('Static E Health Home fits $size and opens existing insights', (
+    testWidgets('Static E Health Home fits $size and opens health details', (
       tester,
     ) async {
       tester.view.physicalSize = size;
@@ -40,6 +40,10 @@ void main() {
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: buildTheme(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
             home: Scaffold(
               backgroundColor: beamNavy,
               bottomNavigationBar: AppBottomNavigation(
@@ -77,11 +81,11 @@ void main() {
       }
       await tester.tap(find.text('Device'));
       await tester.pumpAndSettle();
-      expect(routes.last, 'ring');
-      await tester.tap(find.text('AI Coach'));
+      expect(routes.last, 'tab:2');
+      await tester.tap(find.text('Care'));
       await tester.pumpAndSettle();
       expect(routes.last, 'tab:3');
-      final action = find.text('Health Insights');
+      final action = find.text('Health Report');
       await tester.scrollUntilVisible(
         action,
         400,
@@ -92,7 +96,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(action);
       await tester.pumpAndSettle();
-      expect(routes.last, 'insights');
+      expect(routes.last, 'report');
       expect(tester.takeException(), isNull);
     });
   }

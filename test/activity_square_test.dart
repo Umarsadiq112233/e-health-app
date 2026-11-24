@@ -7,7 +7,9 @@ void main() {
   testWidgets('Activity card stays square at responsive widths', (
     tester,
   ) async {
-    final font = FontLoader('EHealth')..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf'))..addFont(rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
+    final font = FontLoader('EHealth')
+      ..addFont(rootBundle.load('assets/fonts/Roboto-Regular.ttf'))
+      ..addFont(rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
     await font.load();
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -17,6 +19,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(fontFamily: 'EHealth'),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
           home: Scaffold(body: BeamHome(open: (_) {})),
         ),
       );

@@ -10,7 +10,7 @@ import '../../../../shared/widgets/components.dart';
 import '../../../../shared/health_catalog.dart';
 import '../../domain/health_reading.dart';
 import '../cubit/health_cubit.dart';
-import '../../../device_pairing/presentation/pages/pairing_flow.dart';
+import '../../../device_pairing/presentation/pages/discover_devices_screen.dart';
 
 class MetricScreen extends StatefulWidget {
   final int index;
@@ -135,7 +135,7 @@ class _MetricScreenState extends State<MetricScreen> {
                 onPressed: () => Navigator.of(context).push(
                   AppPageRoute<void>(
                     reducedMotion: MediaQuery.disableAnimationsOf(context),
-                    builder: (_) => const PairingFlow(),
+                    builder: (_) => const DiscoverDevicesScreen(),
                   ),
                 ),
               ),

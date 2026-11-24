@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/health_catalog.dart';
 import '../../features/notifications/domain/reminder.dart';
+import '../../features/profile/domain/models/account_profile.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -83,6 +84,12 @@ class AppSessionCubit extends Cubit<AppSessionState> {
     name = newName;
     email = newEmail;
     weight = newWeight;
+    _publish();
+  }
+
+  void profileDetails({DateTime? birthDate, String? gender}) {
+    this.birthDate = birthDateValue(birthDate) ?? '';
+    if (gender != null && gender.isNotEmpty) this.gender = gender;
     _publish();
   }
 

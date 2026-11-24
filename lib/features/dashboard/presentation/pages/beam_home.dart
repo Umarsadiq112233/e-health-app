@@ -29,14 +29,18 @@ class BeamHome extends StatelessWidget {
     String title,
     String route, {
     Color color = beamCyan,
+    bool compact = false,
   }) => Row(
     children: [
-      BeamIcon(icon, size: 20, color: color),
-      const SizedBox(width: 8),
+      BeamIcon(icon, size: compact ? 18 : 20, color: color),
+      SizedBox(width: compact ? 6 : 8),
       Expanded(
         child: Text(
           title,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: compact ? 11 : 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       InkWell(
@@ -47,8 +51,12 @@ class BeamHome extends StatelessWidget {
             color: Color(0xFF003047),
             shape: BoxShape.circle,
           ),
-          padding: const EdgeInsets.all(5),
-          child: const Icon(Icons.chevron_right, size: 18, color: Colors.white),
+          padding: EdgeInsets.all(compact ? 4 : 5),
+          child: Icon(
+            Icons.chevron_right,
+            size: compact ? 16 : 18,
+            color: Colors.white,
+          ),
         ),
       ),
     ],
@@ -59,37 +67,43 @@ class BeamHome extends StatelessWidget {
     String value,
     Color color,
     String route,
-    String kind,
-  ) => card(
-    Column(
+    String kind, {
+    double? height,
+  }) {
+    final compact = height != null;
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        heading(icon, title, route, color: color),
-        const SizedBox(height: 5),
+        heading(icon, title, route, color: color, compact: compact),
+        SizedBox(height: compact ? 3 : 5),
         Row(
           children: [
             Expanded(
               child: Text(
                 value,
-                style: const TextStyle(
-                  fontSize: 21,
+                style: TextStyle(
+                  fontSize: compact ? 19 : 21,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
             if (kind != 'line')
-              SizedBox(width: 55, height: 23, child: _ChartMotion(kind, color)),
+              SizedBox(
+                width: compact ? 48 : 55,
+                height: compact ? 18 : 23,
+                child: _ChartMotion(kind, color),
+              ),
           ],
         ),
         if (kind == 'line') ...[
-          const SizedBox(height: 4),
+          SizedBox(height: compact ? 2 : 4),
           SizedBox(
-            height: 24,
+            height: compact ? 18 : 24,
             width: double.infinity,
             child: _ChartMotion(kind, color),
           ),
         ],
-        const SizedBox(height: 5),
+        SizedBox(height: compact ? 3 : 5),
         Text(
           kind == 'line'
               ? '↑ +2%  ·  60–100 bpm'
@@ -97,14 +111,18 @@ class BeamHome extends StatelessWidget {
               ? 'Deep 2h 10m · Light 4h 28m'
               : 'Normal · 95–100%',
           style: TextStyle(
-            fontSize: 8,
+            fontSize: compact ? 7 : 8,
             color: kind == 'line' ? const Color(0xFF00ECB0) : beamMuted,
           ),
         ),
       ],
-    ),
-    padding: const EdgeInsets.all(10),
-  );
+    );
+    return SizedBox(
+      height: height,
+      child: card(content, padding: EdgeInsets.all(compact ? 8 : 10)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Theme(
     data: beamTheme(context),
@@ -117,12 +135,12 @@ class BeamHome extends StatelessWidget {
             builder: (context, box) => ListView(
               padding: EdgeInsets.symmetric(
                 horizontal: box.maxWidth > 700 ? (box.maxWidth - 680) / 2 : 16,
-                vertical: 14,
+                vertical: 0,
               ),
               children: [
                 Row(
                   children: [
-                    const BeamLogo(width: 116, horizontal: true),
+                    const BeamLogo(width: 92, horizontal: true, textScale: 2),
                     const Spacer(),
                     IconButton(
                       tooltip: 'Notifications',
@@ -160,7 +178,7 @@ class BeamHome extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -285,52 +303,87 @@ class BeamHome extends StatelessWidget {
                         ),
                       ),
                     );
-                    final metrics = Column(
-                      children: [
-                        metric(
-                          'heart',
-                          'Heart Rate',
-                          '72 BPM',
-                          const Color(0xFFFF5D79),
-                          'metric:0',
-                          'line',
-                        ),
-                        const SizedBox(height: 8),
-                        metric(
-                          'moon',
-                          'Sleep',
-                          '7h 24m',
-                          const Color(0xFFA185FA),
-                          'metric:4',
-                          'bars',
-                        ),
-                        const SizedBox(height: 8),
-                        metric(
-                          'drop',
-                          'SpO₂',
-                          '98%',
-                          beamCyan,
-                          'metric:2',
-                          'bars',
-                        ),
-                      ],
-                    );
-                    if (area.maxWidth < 340 ||
-                        MediaQuery.textScalerOf(context).scale(12) > 17) {
+                    final useColumns =
+                        area.maxWidth >= 620 &&
+                        MediaQuery.textScalerOf(context).scale(12) <= 17;
+                    if (!useColumns) {
                       return Column(
                         children: [
                           activity,
                           const SizedBox(height: 10),
-                          metrics,
+                          metric(
+                            'heart',
+                            'Heart Rate',
+                            '72 BPM',
+                            const Color(0xFFFF5D79),
+                            'metric:0',
+                            'line',
+                          ),
+                          const SizedBox(height: 8),
+                          metric(
+                            'moon',
+                            'Sleep',
+                            '7h 24m',
+                            const Color(0xFFA185FA),
+                            'metric:4',
+                            'bars',
+                          ),
+                          const SizedBox(height: 8),
+                          metric(
+                            'drop',
+                            'SpO₂',
+                            '98%',
+                            beamCyan,
+                            'metric:2',
+                            'bars',
+                          ),
                         ],
                       );
                     }
+                    final columnWidth = (area.maxWidth - 10) / 2;
+                    final metricHeight = (columnWidth - 16) / 3;
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: activity),
+                        SizedBox(width: columnWidth, child: activity),
                         const SizedBox(width: 10),
-                        Expanded(child: metrics),
+                        SizedBox(
+                          width: columnWidth,
+                          height: columnWidth,
+                          child: Column(
+                            children: [
+                              metric(
+                                'heart',
+                                'Heart Rate',
+                                '72 BPM',
+                                const Color(0xFFFF5D79),
+                                'metric:0',
+                                'line',
+                                height: metricHeight,
+                              ),
+                              const SizedBox(height: 8),
+                              metric(
+                                'moon',
+                                'Sleep',
+                                '7h 24m',
+                                const Color(0xFFA185FA),
+                                'metric:4',
+                                'bars',
+                                height: metricHeight,
+                              ),
+                              const SizedBox(height: 8),
+                              metric(
+                                'drop',
+                                'SpO₂',
+                                '98%',
+                                beamCyan,
+                                'metric:2',
+                                'bars',
+                                height: metricHeight,
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     );
                   },
@@ -398,8 +451,8 @@ class BeamHome extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           BeamButton(
-                            'View Insights',
-                            onPressed: () => open('insights'),
+                            'Open AI Coach',
+                            onPressed: () => open('coach'),
                           ),
                         ],
                       ),
@@ -450,9 +503,9 @@ class BeamHome extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 BeamButton(
-                  'Health Insights',
+                  'Health Report',
                   arrow: true,
-                  onPressed: () => open('insights'),
+                  onPressed: () => open('report'),
                 ),
               ],
             ),
@@ -591,8 +644,9 @@ class _ActivityRing extends CustomPainter {
 }
 
 class _HomeChart extends CustomPainter {
-  const _HomeChart(this.kind, this.color, [this.progress = 1]);
+  const _HomeChart(this.kind, this.color, [this.progress = 1, this.phase = 0]);
   final double progress;
+  final double phase;
   final String kind;
   final Color color;
   @override
@@ -604,7 +658,9 @@ class _HomeChart extends CustomPainter {
         final x = size.width * i / 40;
         final y =
             size.height *
-            (.5 + .22 * math.sin(i * .65) + .12 * math.cos(i * .34));
+            (.5 +
+                .22 * math.sin(i * .65 + phase * math.pi * 2) +
+                .12 * math.cos(i * .34 + phase * math.pi * 2));
         if (i == 0) {
           path.moveTo(x, y);
         } else {
@@ -678,26 +734,72 @@ class _HomeChart extends CustomPainter {
   bool shouldRepaint(_HomeChart oldDelegate) =>
       oldDelegate.kind != kind ||
       oldDelegate.color != color ||
-      oldDelegate.progress != progress;
+      oldDelegate.progress != progress ||
+      oldDelegate.phase != phase;
 }
 
-class _ChartMotion extends StatelessWidget {
+class _ChartMotion extends StatefulWidget {
   const _ChartMotion(this.kind, this.color);
   final String kind;
   final Color color;
   @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(
-      begin: MediaQuery.disableAnimationsOf(context) ? 1 : 0,
-      end: 1,
-    ),
-    duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 850),
-    curve: Curves.easeOutCubic,
-    builder: (context, value, _) =>
-        CustomPaint(painter: _HomeChart(kind, color, value)),
+  State<_ChartMotion> createState() => _ChartMotionState();
+}
+
+class _ChartMotionState extends State<_ChartMotion>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _lineController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.kind != 'line') return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _lineController
+        ..stop()
+        ..value = 0;
+    } else if (!_lineController.isAnimating) {
+      _lineController.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _lineController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.kind == 'line') {
+      return AnimatedBuilder(
+        animation: _lineController,
+        builder: (context, _) => CustomPaint(
+          painter: _HomeChart(
+            widget.kind,
+            widget.color,
+            1,
+            _lineController.value,
+          ),
+        ),
+      );
+    }
+    return TweenAnimationBuilder<double>(
+      tween: Tween(
+        begin: MediaQuery.disableAnimationsOf(context) ? 1 : 0,
+        end: 1,
+      ),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 850),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, _) =>
+          CustomPaint(painter: _HomeChart(widget.kind, widget.color, value)),
+    );
+  }
 }
 
 class _RingMotion extends StatelessWidget {
@@ -720,108 +822,121 @@ class _ConnectionCard extends StatelessWidget {
   const _ConnectionCard({required this.open});
   final ValueChanged<String> open;
   @override
-  Widget build(BuildContext context) => Container(
-    height: 112,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: beamCyan.withValues(alpha: .55)),
-      gradient: const LinearGradient(colors: [Color(0xFF002D43), beamNavy]),
-      boxShadow: [
-        BoxShadow(color: beamCyan.withValues(alpha: .12), blurRadius: 18),
-      ],
-    ),
-    child: Stack(
-      children: [
-        Positioned.fill(
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 1100),
-            curve: Curves.easeOutCubic,
-            builder: (context, value, _) =>
-                CustomPaint(painter: _ConnectionWaves(value)),
+  Widget build(BuildContext context) {
+    // Give accessibility text sizes enough vertical room instead of letting
+    // the fixed-height card clip its sync details.
+    final largeText = MediaQuery.textScalerOf(context).scale(11) > 17;
+    final compactWidth = MediaQuery.sizeOf(context).width <= 380;
+    return Container(
+      height: compactWidth
+          ? 210
+          : largeText
+          ? 170
+          : 112,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: beamCyan.withValues(alpha: .55)),
+        gradient: const LinearGradient(colors: [Color(0xFF002D43), beamNavy]),
+        boxShadow: [
+          BoxShadow(color: beamCyan.withValues(alpha: .12), blurRadius: 18),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 1100),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) =>
+                  CustomPaint(painter: _ConnectionWaves(value)),
+            ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 102,
-                child: BeamReveal(
-                  art: true,
-                  child: Image.asset(BeamAssets.scene, fit: BoxFit.contain),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 102,
+                  child: BeamReveal(
+                    art: true,
+                    child: Image.asset(BeamAssets.scene, fit: BoxFit.contain),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'E Health Pulse',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'E Health Pulse',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    const Text(
-                      '● Connected',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF00ECB0)),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const BeamIcon(
-                          'battery',
-                          size: 17,
+                      const SizedBox(height: 3),
+                      const Text(
+                        '● Connected',
+                        style: TextStyle(
+                          fontSize: 11,
                           color: Color(0xFF00ECB0),
                         ),
-                        const SizedBox(width: 4),
-                        const Text('85%', style: TextStyle(fontSize: 11)),
-                        const SizedBox(width: 10),
-                        const BeamIcon('sync', size: 17),
-                        const SizedBox(width: 6),
-                        const Expanded(
-                          child: Text(
-                            'Last synced\nToday, 09:28',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: beamMuted,
-                              height: 1.4,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const BeamIcon(
+                            'battery',
+                            size: 17,
+                            color: Color(0xFF00ECB0),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text('85%', style: TextStyle(fontSize: 11)),
+                          const SizedBox(width: 10),
+                          const BeamIcon('sync', size: 17),
+                          const SizedBox(width: 6),
+                          const Expanded(
+                            child: Text(
+                              'Last synced\nToday, 09:28',
+                              style: TextStyle(
+                                fontSize: 8,
+                                color: beamMuted,
+                                height: 1.4,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: () => open('ring'),
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF00364A),
+                      border: Border.all(color: beamBorder),
                     ),
-                  ],
-                ),
-              ),
-              InkWell(
-                onTap: () => open('ring'),
-                child: Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF00364A),
-                    border: Border.all(color: beamBorder),
-                  ),
-                  child: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.white,
-                    size: 18,
+                    child: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class _ConnectionWaves extends CustomPainter {

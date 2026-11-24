@@ -72,9 +72,14 @@ class _SplashPageState extends State<SplashPage>
           child: LayoutBuilder(
             builder: (context, constraints) {
               // Scale the original native composition without rasterizing its logo or text.
+              // Keep the original composition readable without letting XL
+              // screens inflate the mark and orbital animation too far.
               final scale = math.min(
-                constraints.maxWidth / 604,
-                constraints.maxHeight / 1310,
+                1.0,
+                math.min(
+                  constraints.maxWidth / 604,
+                  constraints.maxHeight / 1310,
+                ),
               );
               return Stack(
                 fit: StackFit.expand,

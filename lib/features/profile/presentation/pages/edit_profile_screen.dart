@@ -42,7 +42,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         flowController?.state.setup.wellness ?? <String, dynamic>{};
     gender = wellness['gender']?.toString() ?? gender;
     units = wellness['units']?.toString() ?? units;
-    birthday = DateTime.tryParse(wellness['birthday']?.toString() ?? '');
+    birthday = parseBirthDate(wellness['birthday']);
     height.text = wellness['heightCm']?.toString() ?? '';
     controller = widget.controller;
     if (controller == null) {
@@ -59,6 +59,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             flow!.acceptProfile(profile);
             final session = AppSessionCubit.instance;
             session.profile(profile.name, profile.email, profile.weight);
+            session.profileDetails(birthDate: profile.birthDate);
             session.profilePhoto(profile.avatarDisplayUrl, profile.avatarPath);
           },
         );
@@ -586,7 +587,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       FocusScope.of(context).unfocus();
                                       var saved =
                                           !cubit.state.dirty ||
-                                          await cubit.save();
+                                          await cubit.save(birthDate: birthday);
                                       if (saved &&
                                           extraDirty &&
                                           flowController != null) {
@@ -610,6 +611,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                             },
                                           );
                                           if (mounted) {
+                                            AppSessionCubit.instance
+                                                .profileDetails(
+                                                  birthDate: birthday,
+                                                  gender: gender,
+                                                );
                                             setState(() => extraDirty = false);
                                           }
                                         } catch (_) {
@@ -757,7 +763,7 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Email changes use Supabase Auth. Follow the verification instructions sent to your inbox before using the new address.',
+              'Supabase will send a verification email to the new address before changing your sign-in email.',
             ),
             const SizedBox(height: 16),
             TextFormField(

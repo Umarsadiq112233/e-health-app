@@ -5,13 +5,12 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/config/supabase_config.dart';
 
-// Compatibility endpoint from the working scanner implementation supplied for
-// this feature. It accepts the same {imageUrl: dataUrl} payload. The app
-// first tries this project's function and only uses this fallback when that
-// function is still unavailable (HTTP 404).
-const _compatibilityEndpoint =
+// This is the existing working scanner function. It accepts the same
+// {imageUrl: dataUrl} payload and remains the nutrition provider for this app.
+// The key is a public Supabase anon/publishable key, never a service-role key.
+const _workingScannerEndpoint =
     'https://bnineticuomwftfnjhrk.supabase.co/functions/v1/analyze-meal-ingredients-v8';
-const _compatibilityAnonKey =
+const _workingScannerKey =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuaW5ldGljdW9td2Z0Zm5qaHJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzNzYxOTMsImV4cCI6MjA2OTk1MjE5M30.dOAYGnag3Uq_aa7FuyD1OKkwHNwkvH3gnz-tTFva_HQ';
 
 class FoodAnalysisException implements Exception {
@@ -109,8 +108,9 @@ class FoodAnalysisResult {
 /// Sends a camera photo to the app's server-side food analysis function.
 ///
 /// The endpoint is intentionally configurable at build time. The default
-/// points to this project's Supabase Edge Function, so no provider key is ever
-/// shipped inside the Flutter binary.
+/// points to the existing working scanner Supabase Edge Function. The
+/// provider key remains server-side; only the function's public Supabase key
+/// is sent by the Flutter client.
 class FoodAnalysisService {
   FoodAnalysisService({
     http.Client? client,
@@ -124,8 +124,8 @@ class FoodAnalysisService {
                    .trim()
                    .isNotEmpty
                ? const String.fromEnvironment('NUTRITION_ANALYSIS_URL')
-               : '${SupabaseConfig.url}/functions/v1/analyze-meal'),
-       publishableKey = publishableKey ?? SupabaseConfig.key;
+               : _workingScannerEndpoint),
+       publishableKey = publishableKey ?? _workingScannerKey;
 
   final http.Client _client;
   final bool _ownsClient;
@@ -135,7 +135,7 @@ class FoodAnalysisService {
   Future<FoodAnalysisResult> analyze(Uint8List imageBytes) async {
     if (endpoint.trim().isEmpty) {
       throw const FoodAnalysisException(
-        'Food analysis is not configured yet. Set NUTRITION_ANALYSIS_URL or deploy the Supabase function.',
+        'Food analysis is not configured yet. Set NUTRITION_ANALYSIS_URL or configure the scanner function.',
       );
     }
 
@@ -144,10 +144,10 @@ class FoodAnalysisService {
     late http.Response response;
     try {
       response = await _post(endpoint, publishableKey, body);
-      if (response.statusCode == 404 && _isDefaultProjectEndpoint) {
+      if (response.statusCode == 404 && _isAppProjectEndpoint) {
         response = await _post(
-          _compatibilityEndpoint,
-          _compatibilityAnonKey,
+          _workingScannerEndpoint,
+          _workingScannerKey,
           body,
         );
       }
@@ -194,7 +194,7 @@ class FoodAnalysisService {
     return FoodAnalysisResult.fromResponse(payload);
   }
 
-  bool get _isDefaultProjectEndpoint =>
+  bool get _isAppProjectEndpoint =>
       endpoint == '${SupabaseConfig.url}/functions/v1/analyze-meal';
 
   Future<http.Response> _post(String target, String key, String body) => _client

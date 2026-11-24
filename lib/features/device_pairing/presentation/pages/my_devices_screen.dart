@@ -91,11 +91,11 @@ class MyDevicesScreen extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                     children: [
                       BeamTabHeader(
                         title: 'My Devices',
-                        padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
+                        padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
                         trailing: BeamHeaderAction(
                           icon: Icons.info_outline_rounded,
                           tooltip: 'Device information',

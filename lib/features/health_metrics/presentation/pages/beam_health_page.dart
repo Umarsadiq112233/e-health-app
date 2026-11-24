@@ -9,7 +9,7 @@ import '../../../../app/navigation/app_page_route.dart';
 import '../../../../app/state/app_session_cubit.dart';
 import '../../../onboarding/presentation/cubit/app_flow_cubit.dart';
 import '../../../device_pairing/presentation/cubit/device_cubit.dart';
-import '../../../device_pairing/presentation/pages/pairing_flow.dart';
+import '../../../device_pairing/presentation/pages/discover_devices_screen.dart';
 import '../../../../shared/health_catalog.dart';
 import '../widgets/beam_health_charts.dart';
 
@@ -184,7 +184,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       await Navigator.of(context).push(
         AppPageRoute<void>(
           reducedMotion: MediaQuery.disableAnimationsOf(context),
-          builder: (_) => const PairingFlow(),
+          builder: (_) => const DiscoverDevicesScreen(),
         ),
       );
       return;
@@ -473,7 +473,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           BeamTabHeader(
             title: 'Wellness Insights',
             subtitle: 'Preview',
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             trailing: BeamHeaderAction(
               icon: Icons.bar_chart_rounded,
               tooltip: 'View insights',

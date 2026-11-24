@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="376" height="384" viewBox="0 0 376 384" fill="none">
+  <title>Food scan icon</title>
+  <g stroke="#000" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 105V24H100M274 24H355V105M19 279V360H100M274 360H355V279"/>
+    <path d="M187 125C167 126 151 103 127 106C91 108 69 143 69 191C69 238 90 297 123 313C146 324 164 313 178 303C183 299 190 299 196 303C211 313 227 324 251 312C284 295 305 239 305 190C305 143 284 108 251 106C223 104 208 127 187 125Z"/>
+    <path d="M187 121C182 92 192 69 218 67"/>
+  </g>
+</svg>

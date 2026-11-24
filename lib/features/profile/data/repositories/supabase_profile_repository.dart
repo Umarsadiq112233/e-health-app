@@ -36,6 +36,16 @@ class SupabaseProfileRepository
           .upsert({'id': userId}, onConflict: 'id', ignoreDuplicates: true);
       row = await client.from('profiles').select().eq('id', userId).single();
     }
+    final wellness = row['permissions'] is Map
+        ? Map<String, dynamic>.from(
+            (row['permissions'] as Map)['_wellness'] is Map
+                ? (row['permissions'] as Map)['_wellness'] as Map
+                : const {},
+          )
+        : <String, dynamic>{};
+    final birthDate =
+        parseBirthDate(row['date_of_birth']) ?? parseBirthDate(wellness['birthday']);
+    if (birthDate != null) wellness['birthday'] = birthDateValue(birthDate);
     return SetupProgress.fromJson({
       'name': row['full_name'],
       'weight': row['weight_kg'],
@@ -46,9 +56,7 @@ class SupabaseProfileRepository
       'permissions': row['permissions'] is Map
           ? (Map.from(row['permissions'] as Map)..remove('_wellness'))
           : const {},
-      'wellness': row['permissions'] is Map
-          ? (row['permissions'] as Map)['_wellness']
-          : null,
+      'wellness': wellness,
       'avatarPath': row['avatar_path'],
       'avatarUrl': row['avatar_url'],
       'avatarDisplayUrl': await resolveAvatar(
@@ -76,6 +84,10 @@ class SupabaseProfileRepository
               ...progress.permissions,
               if (progress.wellness.isNotEmpty) '_wellness': progress.wellness,
             },
+            if (progress.wellness.containsKey('birthday'))
+              'date_of_birth': birthDateValue(
+                parseBirthDate(progress.wellness['birthday']),
+              ),
           })
           .eq('id', userId)
           .select('id')
@@ -121,6 +133,14 @@ class SupabaseProfileRepository
       name: row['full_name']?.toString() ?? '',
       weight: row['weight_kg']?.toString() ?? '',
       email: client.auth.currentUser!.email ?? '',
+      birthDate:
+          parseBirthDate(row['date_of_birth']) ??
+          parseBirthDate(
+            row['permissions'] is Map &&
+                    (row['permissions'] as Map)['_wellness'] is Map
+                ? (row['permissions'] as Map)['_wellness']['birthday']
+                : null,
+          ),
       avatarPath: path,
       legacyAvatarUrl: legacy,
       avatarDisplayUrl: url,
@@ -152,6 +172,7 @@ class SupabaseProfileRepository
     AccountProfile before, {
     required String name,
     required String weight,
+    DateTime? birthDate,
     required AvatarEdit avatarEdit,
     AvatarPhoto? photo,
   }) async {
@@ -198,6 +219,8 @@ class SupabaseProfileRepository
     final patch = <String, dynamic>{
       if (name != before.name) 'full_name': name,
       if (weight != before.weight) 'weight_kg': weight,
+      if (birthDateValue(birthDate) != birthDateValue(before.birthDate))
+        'date_of_birth': birthDateValue(birthDate),
       if (avatarEdit != AvatarEdit.keep) 'avatar_path': newPath,
       if (avatarEdit != AvatarEdit.keep) 'avatar_url': null,
     };
@@ -227,6 +250,7 @@ class SupabaseProfileRepository
       if (actual != null &&
           actual.name == name &&
           actual.weight == weight &&
+          birthDateValue(actual.birthDate) == birthDateValue(birthDate) &&
           matchingPhoto) {
         confirmed = actual;
       } else {

@@ -12,7 +12,7 @@ SDK callbacks are handled centrally, serialized and deduplicated. Initial links 
 
 ## Required hosted configuration
 
-Follow [BREVO_AUTH_EMAIL.md](BREVO_AUTH_EMAIL.md). No live deployment was performed: sender, recipient and dashboard availability were placeholders, and credentials were not available.
+Follow [BREVO_AUTH_EMAIL.md](BREVO_AUTH_EMAIL.md) to deploy the Supabase OTP email hook through Brevo.
 
 1. Verify a Brevo sender and authenticate its sending domain. Rotate all keys pasted in chat; enter the new API key only in Edge Function secrets.
 2. Deploy send-auth-email with JWT verification disabled and enable Supabase's signed Send Email Hook. Configure its generated signing secret; unsigned requests are rejected by the handler.

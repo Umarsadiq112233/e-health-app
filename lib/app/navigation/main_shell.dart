@@ -30,7 +30,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int tab = 0;
   final visited = <int>{0};
-  final navigators = List.generate(6, (_) => GlobalKey<NavigatorState>());
+  final navigators = List.generate(5, (_) => GlobalKey<NavigatorState>());
   void select(int index) {
     if (index == tab) {
       navigators[index].currentState?.popUntil((route) => route.isFirst);
@@ -47,11 +47,10 @@ class _MainShellState extends State<MainShell> {
       return;
     }
     final target = switch (route) {
-      'insights' => 1,
-      'scan-food' => 2,
-      'ring' => 3,
-      'care-team' => 4,
-      'profile' => 5,
+      'scan-food' => 1,
+      'ring' => 2,
+      'care-team' => 3,
+      'profile' => 4,
       _ => null,
     };
     if (target != null) {
@@ -115,13 +114,12 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: beamNavy,
       body: SafeArea(child: Dashboard(open: open)),
     ),
-    1 => const BeamHealthPage(kind: BeamHealthKind.insights),
-    2 => const FoodScanScreen(),
-    3 => MyDevicesScreen(
+    1 => const FoodScanScreen(),
+    2 => MyDevicesScreen(
       onData: () => open('history'),
       onBack: () => select(0),
     ),
-    4 => const CareScreen(),
+    3 => const CareScreen(),
     _ => Scaffold(
       backgroundColor: beamNavy,
       body: SafeArea(
@@ -146,7 +144,7 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(
         index: tab,
         children: [
-          for (var index = 0; index < 6; index++)
+          for (var index = 0; index < 5; index++)
             visited.contains(index)
                 ? TickerMode(
                     enabled: tab == index,
@@ -216,12 +214,21 @@ class AppBottomNavigation extends StatelessWidget {
       child: Row(
         children: [
           for (final item in const [
-            _BottomNavItem.beam('home', 'Home'),
-            _BottomNavItem.beam('insights', 'Insights'),
-            _BottomNavItem.material(Icons.camera_alt_rounded, 'Scan Food'),
-            _BottomNavItem.beam('watch', 'Device'),
+            _BottomNavItem.asset('assets/icons/connect/home-icon.svg', 'Home'),
+            _BottomNavItem.asset(
+              'assets/icons/connect/food-scan-icon.svg',
+              'Scan Food',
+              iconSize: 26,
+            ),
+            _BottomNavItem.asset(
+              'assets/icons/connect/watch-icon.svg',
+              'Device',
+            ),
             _BottomNavItem.beam('users', 'Care'),
-            _BottomNavItem.beam('person', 'Profile'),
+            _BottomNavItem.asset(
+              'assets/icons/connect/profile-icon.svg',
+              'Profile',
+            ),
           ].indexed)
             Expanded(
               child: Semantics(
@@ -236,10 +243,10 @@ class AppBottomNavigation extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        item.$2.beamIcon == null
-                            ? Icon(
-                                item.$2.materialIcon,
-                                size: 22,
+                        item.$2.assetIcon != null
+                            ? BeamAssetIcon(
+                                item.$2.assetIcon!,
+                                size: item.$2.iconSize,
                                 color: selected == item.$1
                                     ? beamCyan
                                     : beamMuted,
@@ -273,13 +280,16 @@ class AppBottomNavigation extends StatelessWidget {
 }
 
 class _BottomNavItem {
-  const _BottomNavItem.beam(this.beamIcon, this.label) : materialIcon = null;
-  const _BottomNavItem.material(this.materialIcon, this.label)
+  const _BottomNavItem.beam(this.beamIcon, this.label)
+    : assetIcon = null,
+      iconSize = 22;
+  const _BottomNavItem.asset(this.assetIcon, this.label, {this.iconSize = 24})
     : beamIcon = null;
 
   final String? beamIcon;
-  final IconData? materialIcon;
+  final String? assetIcon;
   final String label;
+  final double iconSize;
 }
 
 class _TabObserver extends NavigatorObserver {

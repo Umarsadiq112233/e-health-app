@@ -22,6 +22,8 @@ class SupabaseAuthRepository implements AuthRepository, SocialAuthRepository {
   bool isDisposed = false;
   String? _callbackError;
   Future<void> _callbackQueue = Future.value();
+  static const _emailRequestCooldown = Duration(seconds: 60);
+  final _lastEmailRequests = <String, DateTime>{};
   @override
   String? get callbackError => _callbackError;
   @override
@@ -147,8 +149,8 @@ class SupabaseAuthRepository implements AuthRepository, SocialAuthRepository {
           'Invalid login credentials. Check your email and password.',
         'email_not_confirmed' =>
           'Verify your email with the code in your inbox before logging in.',
-        'over_request_rate_limit' || 'over_email_send_rate_limit' =>
-          'Too many requests. Please wait before trying again.',
+        'over_email_send_rate_limit' => 'Supabase is temporarily limiting verification emails. Wait a few minutes and use the latest email only.',
+        'over_request_rate_limit' => 'Supabase is temporarily limiting requests from this device or IP. Wait a few minutes before retrying.',
         'otp_expired' => 'This code is invalid, expired or already used. Request a new code and try again.',
         'flow_state_expired' || 'flow_state_not_found' =>
           'This link has expired or was already used. Request a new link.',
@@ -166,17 +168,46 @@ class SupabaseAuthRepository implements AuthRepository, SocialAuthRepository {
     }
   }
 
+  Future<T> _emailRequest<T>(String email, Future<T> Function() action) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return action();
+    final last = _lastEmailRequests[normalized];
+    if (last != null) {
+      final elapsed = DateTime.now().difference(last);
+      if (elapsed < _emailRequestCooldown) {
+        final seconds = (_emailRequestCooldown - elapsed).inSeconds + 1;
+        throw AuthFailure(
+          'Please wait $seconds seconds before requesting another email.',
+        );
+      }
+      _lastEmailRequests.remove(normalized);
+    }
+    try {
+      final result = await action();
+      _lastEmailRequests[normalized] = DateTime.now();
+      return result;
+    } on AuthFailure catch (error) {
+      if (error.message.contains('temporarily limiting')) {
+        _lastEmailRequests[normalized] = DateTime.now();
+      }
+      rethrow;
+    }
+  }
+
   @override
   Future<AuthUser?> signUp(String name, String email, String password) =>
-      _request(() async {
-        final result = await client.auth.signUp(
-          email: email,
-          password: password,
-          data: {'full_name': name},
-          emailRedirectTo: redirect,
-        );
-        return result.session == null ? null : _map(result.session!.user);
-      });
+      _emailRequest(
+        email,
+        () => _request(() async {
+          final result = await client.auth.signUp(
+            email: email,
+            password: password,
+            data: {'full_name': name},
+            emailRedirectTo: redirect,
+          );
+          return result.session == null ? null : _map(result.session!.user);
+        }),
+      );
   @override
   Future<void> signInWithSocial(SocialAuthProvider provider) =>
       _request(() async {
@@ -231,13 +262,16 @@ class SupabaseAuthRepository implements AuthRepository, SocialAuthRepository {
         return _map(result.user!);
       });
   @override
-  Future<void> resendConfirmation(String email) => _request(() async {
-    await client.auth.resend(
-      type: OtpType.signup,
-      email: email,
-      emailRedirectTo: redirect,
-    );
-  });
+  Future<void> resendConfirmation(String email) => _emailRequest(
+    email,
+    () => _request(() async {
+      await client.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: redirect,
+      );
+    }),
+  );
   @override
   Future<AuthUser> verifyRecovery(String email, String code) =>
       _request(() async {
@@ -255,8 +289,11 @@ class SupabaseAuthRepository implements AuthRepository, SocialAuthRepository {
         return _map(result.user!);
       });
   @override
-  Future<void> sendPasswordReset(String email) => _request(
-    () => client.auth.resetPasswordForEmail(email, redirectTo: redirect),
+  Future<void> sendPasswordReset(String email) => _emailRequest(
+    email,
+    () => _request(
+      () => client.auth.resetPasswordForEmail(email, redirectTo: redirect),
+    ),
   );
   @override
   Future<void> updatePassword(String password) => _request(() async {

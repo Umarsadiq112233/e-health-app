@@ -3,13 +3,13 @@ import 'dart:convert';
 class SupabaseConfig {
   static const url = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://agigsbwjaupsfvhcnseg.supabase.co',
+    defaultValue: 'https://oamqpmqlydxmxeeipyha.supabase.co',
   );
   static const key = String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
     defaultValue: String.fromEnvironment(
       'SUPABASE_ANON_KEY',
-      defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaWdzYndqYXVwc2Z2aGNuc2VnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNzI0ODAsImV4cCI6MjEwNjg0ODQ4MH0.mAh5TYneXrY8UWPa9IlW4YazX-IKDy_z9XppxN_TUrg',
+      defaultValue: 'sb_publishable_ErNVg1Sgh2VPzz2hXGTdJQ_DWUf-_ty',
     ),
   );
   static const redirectUrl = String.fromEnvironment(

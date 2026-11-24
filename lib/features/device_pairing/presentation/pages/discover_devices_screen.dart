@@ -14,8 +14,9 @@ import '../cubit/device_cubit.dart';
 
 /// Module 3, screen 22. Only real BLE results are listed.
 class DiscoverDevicesScreen extends StatefulWidget {
-  const DiscoverDevicesScreen({super.key, this.controller});
+  const DiscoverDevicesScreen({super.key, this.controller, this.onCompleted});
   final DeviceCubit? controller;
+  final Future<void> Function()? onCompleted;
   @override
   State<DiscoverDevicesScreen> createState() => _DiscoverDevicesScreenState();
 }
@@ -496,6 +497,7 @@ class _DiscoverDevicesScreenState extends State<DiscoverDevicesScreen> {
                             view: DeviceView.pairing,
                             controller: device,
                             target: entry,
+                            onCompleted: widget.onCompleted,
                           ),
                         ),
                       );

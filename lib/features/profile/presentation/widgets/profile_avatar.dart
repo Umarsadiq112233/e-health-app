@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class ProfileAvatar extends StatelessWidget {
   final String? url;
@@ -12,10 +13,13 @@ class ProfileAvatar extends StatelessWidget {
     final fallback = CircleAvatar(
       radius: radius,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      child: Icon(
-        Icons.person_outline_rounded,
-        size: radius,
-        color: Theme.of(context).colorScheme.primary,
+      child: Padding(
+        padding: EdgeInsets.all(radius * .14),
+        child: SvgPicture.asset(
+          'assets/icons/connect/avatar.svg',
+          fit: BoxFit.contain,
+          excludeFromSemantics: true,
+        ),
       ),
     );
     return Semantics(
