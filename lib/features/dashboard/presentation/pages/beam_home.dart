@@ -1,14 +1,150 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../shared/widgets/beam_ui.dart';
 import '../../../../app/state/app_session_cubit.dart';
+import '../../../device_pairing/presentation/cubit/device_cubit.dart';
+import '../../../health_metrics/domain/health_reading.dart';
+import '../../../health_metrics/presentation/cubit/health_cubit.dart';
 import '../../../profile/presentation/widgets/profile_avatar.dart';
+
+/// Groups thousands with commas, matching the app's displayed step
+/// counts (e.g. 8560 → '8,560').
+String _grouped(num value) => value
+    .round()
+    .toString()
+    .replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (match) => '${match[1]},',
+    );
+
+String _durationText(double hours) {
+  final minutes = (hours * 60).round();
+  return '${minutes ~/ 60}h ${minutes % 60}m';
+}
+
+/// 'Today, 09:28' / 'Yesterday, 09:28' / '12 Oct, 09:28' for the
+/// connection card's last-sync line.
+String _syncLabel(DateTime time) {
+  final now = DateTime.now();
+  final clock =
+      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  if (_sameDay(time, now)) return 'Today, $clock';
+  if (_sameDay(time, now.subtract(const Duration(days: 1)))) {
+    return 'Yesterday, $clock';
+  }
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${time.day} ${months[time.month - 1]}, $clock';
+}
+
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// The last seven calendar days, oldest first, ending today.
+List<DateTime> _last7Days() {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  return [for (var i = 6; i >= 0; i--) today.subtract(Duration(days: i))];
+}
+
+/// The recorded sleep duration (hours) for one day, or 0 when the day
+/// has no synced sleep reading.
+double _sleepOn(HealthState health, DateTime day) {
+  final values = health.readings
+      .where(
+        (reading) =>
+            reading.metric == HealthMetricType.sleep &&
+            _sameDay(reading.timestamp.toLocal(), day),
+      )
+      .map((reading) => reading.value);
+  if (values.isEmpty) return 0;
+  return values.reduce((a, b) => a > b ? a : b);
+}
+
+/// Weekly-average label for the Activity Trend card, from real
+/// readings only: steps per day, mean heart rate, or mean sleep.
+String _weeklyAverage(HealthState health, int tab) {
+  final days = _last7Days();
+  switch (tab) {
+    case 1:
+      final samples = health.history(HealthMetricType.heartRate, 7);
+      if (samples.isEmpty) return '--';
+      final mean =
+          samples.map((r) => r.value).reduce((a, b) => a + b) / samples.length;
+      return '${mean.round()}';
+    case 2:
+      final nights = [
+        for (final day in days) _sleepOn(health, day),
+      ].where((value) => value > 0).toList();
+      if (nights.isEmpty) return '--';
+      return _durationText(nights.reduce((a, b) => a + b) / nights.length);
+    default:
+      final total = [
+        for (final day in days) _stepsOn(health, day),
+      ].reduce((a, b) => a + b);
+      return _grouped(total / 7);
+  }
+}
+
+/// Bar fractions (0–1) for the Activity Trend chart: real daily steps
+/// against the 15K axis, or real nightly sleep against 12h.
+List<double> _weeklyBars(HealthState health, int tab) {
+  final days = _last7Days();
+  if (tab == 2) {
+    return [
+      for (final day in days)
+        (_sleepOn(health, day) / 12).clamp(0, 1).toDouble(),
+    ];
+  }
+  return [
+    for (final day in days)
+      (_stepsOn(health, day) / 15000).clamp(0, 1).toDouble(),
+  ];
+}
+
+/// The recorded step total for one day: the day's largest steps reading
+/// (the watch reports one cumulative total per day), or 0 when the day
+/// has no synced reading.
+double _stepsOn(HealthState health, DateTime day) {
+  final values = health.readings
+      .where(
+        (reading) =>
+            reading.metric == HealthMetricType.steps &&
+            _sameDay(reading.timestamp.toLocal(), day),
+      )
+      .map((reading) => reading.value);
+  if (values.isEmpty) return 0;
+  return values.reduce((a, b) => a > b ? a : b);
+}
 
 class BeamHome extends StatelessWidget {
   const BeamHome({super.key, required this.open});
   final ValueChanged<String> open;
+
+  // Real synced data from the shared health state. Dashboard wraps this
+  // widget in a BlocBuilder on HealthCubit, so these values refresh
+  // whenever new watch data is stored. Nothing here falls back to a
+  // sample value: no reading means zero/empty.
+  HealthState get _health => HealthCubit.instance.state;
+  double get _stepsToday => _stepsOn(_health, DateTime.now());
+  double? get _heartRate => _health.latest(HealthMetricType.heartRate)?.value;
+  double? get _sleepHours => _health.latest(HealthMetricType.sleep)?.value;
+  double? get _oxygen => _health.latest(HealthMetricType.oxygen)?.value;
   Widget card(Widget child, {EdgeInsets padding = const EdgeInsets.all(12)}) =>
       Container(
         padding: padding,
@@ -69,6 +205,7 @@ class BeamHome extends StatelessWidget {
     String route,
     String kind, {
     double? height,
+    String? footer,
   }) {
     final compact = height != null;
     final content = Column(
@@ -105,11 +242,15 @@ class BeamHome extends StatelessWidget {
         ],
         SizedBox(height: compact ? 3 : 5),
         Text(
-          kind == 'line'
-              ? '↑ +2%  ·  60–100 bpm'
-              : icon == 'moon'
-              ? 'Deep 2h 10m · Light 4h 28m'
-              : 'Normal · 95–100%',
+          // Only reference ranges are printed here; trends and sleep
+          // stages are never invented. Callers pass a data-derived
+          // footer when one exists.
+          footer ??
+              (kind == 'line'
+                  ? '60–100 bpm'
+                  : icon == 'moon'
+                  ? 'Goal · 8h'
+                  : '95–100%'),
           style: TextStyle(
             fontSize: compact ? 7 : 8,
             color: kind == 'line' ? const Color(0xFF00ECB0) : beamMuted,
@@ -245,8 +386,11 @@ class BeamHome extends StatelessWidget {
                                       child: Stack(
                                         alignment: Alignment.center,
                                         children: [
-                                          const Positioned.fill(
-                                            child: _RingMotion(),
+                                          Positioned.fill(
+                                            child: _RingMotion(
+                                              fraction: (_stepsToday / 10000)
+                                                  .clamp(0, 1),
+                                            ),
                                           ),
                                           SizedBox(
                                             width: diameter * .62,
@@ -261,9 +405,9 @@ class BeamHome extends StatelessWidget {
                                                     size: 22,
                                                   ),
                                                   const SizedBox(height: 4),
-                                                  const Text(
-                                                    '8,560',
-                                                    style: TextStyle(
+                                                  Text(
+                                                    _grouped(_stepsToday),
+                                                    style: const TextStyle(
                                                       fontSize: 30,
                                                       fontWeight:
                                                           FontWeight.w700,
@@ -291,12 +435,15 @@ class BeamHome extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 4),
+                            // Calories, distance and active minutes have
+                            // no metric in the health model, so they stay
+                            // at zero instead of showing sample values.
                             const Row(
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                _Mini('flame', '320', 'kcal'),
-                                _Mini('pin', '6.2', 'km'),
-                                _Mini('clock', '78', 'min'),
+                                _Mini('flame', '0', 'kcal'),
+                                _Mini('pin', '0', 'km'),
+                                _Mini('clock', '0', 'min'),
                               ],
                             ),
                           ],
@@ -314,7 +461,9 @@ class BeamHome extends StatelessWidget {
                           metric(
                             'heart',
                             'Heart Rate',
-                            '72 BPM',
+                            _heartRate == null
+                                ? '--'
+                                : '${_heartRate!.round()} BPM',
                             const Color(0xFFFF5D79),
                             'metric:0',
                             'line',
@@ -323,19 +472,27 @@ class BeamHome extends StatelessWidget {
                           metric(
                             'moon',
                             'Sleep',
-                            '7h 24m',
+                            _sleepHours == null
+                                ? '--'
+                                : _durationText(_sleepHours!),
                             const Color(0xFFA185FA),
                             'metric:4',
                             'bars',
+                            footer: _sleepHours == null ? 'No data yet' : null,
                           ),
                           const SizedBox(height: 8),
                           metric(
                             'drop',
                             'SpO₂',
-                            '98%',
+                            _oxygen == null ? '--' : '${_oxygen!.round()}%',
                             beamCyan,
                             'metric:2',
                             'bars',
+                            footer: _oxygen == null
+                                ? 'No data yet'
+                                : _oxygen! >= 95 && _oxygen! <= 100
+                                ? 'Normal · 95–100%'
+                                : null,
                           ),
                         ],
                       );
@@ -355,7 +512,9 @@ class BeamHome extends StatelessWidget {
                               metric(
                                 'heart',
                                 'Heart Rate',
-                                '72 BPM',
+                                _heartRate == null
+                                    ? '--'
+                                    : '${_heartRate!.round()} BPM',
                                 const Color(0xFFFF5D79),
                                 'metric:0',
                                 'line',
@@ -365,21 +524,31 @@ class BeamHome extends StatelessWidget {
                               metric(
                                 'moon',
                                 'Sleep',
-                                '7h 24m',
+                                _sleepHours == null
+                                    ? '--'
+                                    : _durationText(_sleepHours!),
                                 const Color(0xFFA185FA),
                                 'metric:4',
                                 'bars',
                                 height: metricHeight,
+                                footer: _sleepHours == null
+                                    ? 'No data yet'
+                                    : null,
                               ),
                               const SizedBox(height: 8),
                               metric(
                                 'drop',
                                 'SpO₂',
-                                '98%',
+                                _oxygen == null ? '--' : '${_oxygen!.round()}%',
                                 beamCyan,
                                 'metric:2',
                                 'bars',
                                 height: metricHeight,
+                                footer: _oxygen == null
+                                    ? 'No data yet'
+                                    : _oxygen! >= 95 && _oxygen! <= 100
+                                    ? 'Normal · 95–100%'
+                                    : null,
                               ),
                             ],
                           ),
@@ -399,22 +568,26 @@ class BeamHome extends StatelessWidget {
                         children: [
                           heading('target', 'Today’s Goals', 'goals'),
                           const SizedBox(height: 12),
-                          const _Goal(
+                          _Goal(
                             'Steps',
-                            '8,560 / 10,000',
-                            .856,
+                            '${_grouped(_stepsToday)} / 10,000',
+                            (_stepsToday / 10000).clamp(0, 1),
                             beamCyan,
                           ),
-                          const _Goal(
+                          _Goal(
                             'Sleep',
-                            '7h 24m / 8h',
-                            .925,
-                            Color(0xFFA185FA),
+                            _sleepHours == null
+                                ? '-- / 8h'
+                                : '${_durationText(_sleepHours!)} / 8h',
+                            ((_sleepHours ?? 0) / 8).clamp(0, 1),
+                            const Color(0xFFA185FA),
                           ),
+                          // Active minutes have no metric in the health
+                          // model, so this goal starts at zero.
                           const _Goal(
                             'Active',
-                            '78 / 60 min',
-                            1,
+                            '0 / 60 min',
+                            0,
                             Color(0xFF00ECB0),
                           ),
                         ],
@@ -596,8 +769,11 @@ class _Goal extends StatelessWidget {
 }
 
 class _ActivityRing extends CustomPainter {
-  const _ActivityRing([this.progress = 1]);
+  const _ActivityRing([this.progress = 1, this.fraction = 0]);
   final double progress;
+
+  /// Share of the step goal the arc covers, from real synced steps.
+  final double fraction;
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -615,7 +791,7 @@ class _ActivityRing extends CustomPainter {
     canvas.drawArc(
       ring,
       -math.pi / 2,
-      math.pi * 2 * .856 * progress,
+      math.pi * 2 * fraction * progress,
       false,
       Paint()
         ..color = beamCyan.withValues(alpha: .18)
@@ -626,7 +802,7 @@ class _ActivityRing extends CustomPainter {
     canvas.drawArc(
       ring,
       -math.pi / 2,
-      math.pi * 2 * .856 * progress,
+      math.pi * 2 * fraction * progress,
       false,
       Paint()
         ..shader = const SweepGradient(
@@ -640,15 +816,26 @@ class _ActivityRing extends CustomPainter {
 
   @override
   bool shouldRepaint(_ActivityRing oldDelegate) =>
-      oldDelegate.progress != progress;
+      oldDelegate.progress != progress || oldDelegate.fraction != fraction;
 }
 
 class _HomeChart extends CustomPainter {
-  const _HomeChart(this.kind, this.color, [this.progress = 1, this.phase = 0]);
+  const _HomeChart(
+    this.kind,
+    this.color, [
+    this.progress = 1,
+    this.phase = 0,
+    this.values,
+  ]);
   final double progress;
   final double phase;
   final String kind;
   final Color color;
+
+  /// Real bar fractions (0–1) for the 'week' chart, supplied by the
+  /// caller from synced readings. Null keeps the decorative defaults
+  /// used by the small metric-card charts.
+  final List<double>? values;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width * progress, size.height));
@@ -698,7 +885,7 @@ class _HomeChart extends CustomPainter {
       return;
     }
     final values = kind == 'week'
-        ? [.43, .62, .49, .66, .46, .63, .61]
+        ? (this.values ?? [.43, .62, .49, .66, .46, .63, .61])
         : [.65, .61, .90, .46, .44, .25, .67];
     if (kind == 'week') {
       for (var i = 0; i < 4; i++) {
@@ -735,13 +922,17 @@ class _HomeChart extends CustomPainter {
       oldDelegate.kind != kind ||
       oldDelegate.color != color ||
       oldDelegate.progress != progress ||
-      oldDelegate.phase != phase;
+      oldDelegate.phase != phase ||
+      oldDelegate.values != values;
 }
 
 class _ChartMotion extends StatefulWidget {
-  const _ChartMotion(this.kind, this.color);
+  const _ChartMotion(this.kind, this.color, {this.values});
   final String kind;
   final Color color;
+
+  /// Real bar fractions for the 'week' chart; see _HomeChart.values.
+  final List<double>? values;
   @override
   State<_ChartMotion> createState() => _ChartMotionState();
 }
@@ -783,6 +974,7 @@ class _ChartMotionState extends State<_ChartMotion>
             widget.color,
             1,
             _lineController.value,
+            widget.values,
           ),
         ),
       );
@@ -796,14 +988,18 @@ class _ChartMotionState extends State<_ChartMotion>
           ? Duration.zero
           : const Duration(milliseconds: 850),
       curve: Curves.easeOutCubic,
-      builder: (context, value, _) =>
-          CustomPaint(painter: _HomeChart(widget.kind, widget.color, value)),
+      builder: (context, value, _) => CustomPaint(
+        painter: _HomeChart(widget.kind, widget.color, value, 0, widget.values),
+      ),
     );
   }
 }
 
 class _RingMotion extends StatelessWidget {
-  const _RingMotion();
+  const _RingMotion({this.fraction = 0});
+
+  /// Share of the step goal completed, from real synced steps.
+  final double fraction;
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(
@@ -814,7 +1010,8 @@ class _RingMotion extends StatelessWidget {
         ? Duration.zero
         : const Duration(milliseconds: 950),
     curve: Curves.easeOutCubic,
-    builder: (context, value, _) => CustomPaint(painter: _ActivityRing(value)),
+    builder: (context, value, _) =>
+        CustomPaint(painter: _ActivityRing(value, fraction)),
   );
 }
 
@@ -854,17 +1051,35 @@ class _ConnectionCard extends StatelessWidget {
                   CustomPaint(painter: _ConnectionWaves(value)),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 102,
-                  child: BeamReveal(
-                    art: true,
-                    child: Image.asset(BeamAssets.scene, fit: BoxFit.contain),
-                  ),
-                ),
+          // Status, battery and last-sync come from the real device
+          // state; the card no longer claims a connection, battery
+          // level or sync time that did not happen.
+          BlocBuilder<DeviceCubit, DeviceState>(
+            bloc: DeviceCubit.instance,
+            builder: (context, state) {
+              final connected =
+                  state.phase == DevicePhase.connected ||
+                  state.phase == DevicePhase.syncing ||
+                  state.phase == DevicePhase.syncCompleted;
+              final battery = state.device?.battery;
+              final lastSync = state.device?.lastSynced?.toLocal();
+              final syncLabel = lastSync == null
+                  ? 'Not synced yet'
+                  : _syncLabel(lastSync);
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 102,
+                      child: BeamReveal(
+                        art: true,
+                        child: Image.asset(
+                          BeamAssets.scene,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -879,11 +1094,13 @@ class _ConnectionCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 3),
-                      const Text(
-                        '● Connected',
+                      Text(
+                        connected ? '● Connected' : '● Not connected',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Color(0xFF00ECB0),
+                          color: connected
+                              ? const Color(0xFF00ECB0)
+                              : beamMuted,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -895,14 +1112,17 @@ class _ConnectionCard extends StatelessWidget {
                             color: Color(0xFF00ECB0),
                           ),
                           const SizedBox(width: 4),
-                          const Text('85%', style: TextStyle(fontSize: 11)),
+                          Text(
+                            battery == null ? '—' : '$battery%',
+                            style: const TextStyle(fontSize: 11),
+                          ),
                           const SizedBox(width: 10),
                           const BeamIcon('sync', size: 17),
                           const SizedBox(width: 6),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Last synced\nToday, 09:28',
-                              style: TextStyle(
+                              'Last synced\n$syncLabel',
+                              style: const TextStyle(
                                 fontSize: 8,
                                 color: beamMuted,
                                 height: 1.4,
@@ -930,8 +1150,10 @@ class _ConnectionCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
-            ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -1059,19 +1281,28 @@ class _WeeklyTrendState extends State<_WeeklyTrend> {
                         : tab == 1
                         ? const Color(0xFFFF5D79)
                         : beamCyan,
+                    values: tab == 1
+                        ? null
+                        : _weeklyBars(HealthCubit.instance.state, tab),
                   ),
                 ),
                 const SizedBox(height: 5),
-                const Row(
+                Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    Text('Mon', style: TextStyle(fontSize: 8)),
-                    Text('Tue', style: TextStyle(fontSize: 8)),
-                    Text('Wed', style: TextStyle(fontSize: 8)),
-                    Text('Thu', style: TextStyle(fontSize: 8)),
-                    Text('Fri', style: TextStyle(fontSize: 8)),
-                    Text('Sat', style: TextStyle(fontSize: 8)),
-                    Text('Sun', style: TextStyle(fontSize: 8)),
+                    for (final day in _last7Days())
+                      Text(
+                        const [
+                          'Mon',
+                          'Tue',
+                          'Wed',
+                          'Thu',
+                          'Fri',
+                          'Sat',
+                          'Sun',
+                        ][day.weekday - 1],
+                        style: const TextStyle(fontSize: 8),
+                      ),
                   ],
                 ),
               ],
@@ -1092,15 +1323,17 @@ class _WeeklyTrendState extends State<_WeeklyTrend> {
                   style: TextStyle(fontSize: 8, color: beamMuted),
                 ),
                 Text(
-                  ['7,892', '72', '7h 24m'][tab],
+                  _weeklyAverage(HealthCubit.instance.state, tab),
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 6),
+                // No week-over-week trend is shown: it is not computed
+                // from a second week of readings, so nothing is claimed.
                 const Text(
-                  '↑ 12%',
+                  '',
                   style: TextStyle(fontSize: 10, color: Color(0xFF00ECB0)),
                 ),
               ],
