@@ -232,12 +232,17 @@ class HealthHeroRing extends StatelessWidget {
     this.color = beamCyan,
     this.progress = .86,
     this.goal,
+    this.badge,
     this.open = false,
   });
   final String value, unit, icon;
   final Color color;
   final double progress;
   final String? goal;
+  // Status label shown under the value when no goal is given. Callers
+  // derive it from the actual reading; when null nothing is shown, so
+  // the ring never claims a status (e.g. "Normal") without data.
+  final String? badge;
   final bool open;
   @override
   Widget build(BuildContext context) => BeamReveal(
@@ -317,8 +322,8 @@ class HealthHeroRing extends StatelessWidget {
                               color: beamMuted,
                             ),
                           )
-                        else
-                          const HealthBadge('Normal'),
+                        else if (badge != null)
+                          HealthBadge(badge!),
                       ],
                     ),
                   ],
