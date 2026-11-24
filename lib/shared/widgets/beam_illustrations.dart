@@ -1,8 +1,21 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../features/health_metrics/domain/health_reading.dart';
+import '../../features/health_metrics/presentation/cubit/health_cubit.dart';
 import 'beam_ui.dart';
+
+/// Groups thousands with commas, matching the app's displayed step
+/// counts (e.g. 8560 → '8,560').
+String _grouped(num value) => value
+    .round()
+    .toString()
+    .replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (match) => '${match[1]},',
+    );
 
 class BeamProductHero extends StatelessWidget {
   const BeamProductHero({
@@ -233,66 +246,93 @@ class BeamFeatureRow extends StatelessWidget {
 class BeamTrackingPanel extends StatelessWidget {
   const BeamTrackingPanel({super.key});
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _MetricCard(
-              icon: 'steps',
-              value: '8,560',
-              label: 'Steps',
-              color: beamCyan,
-              chart: 'steps',
-            ),
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: _MetricCard(
-              icon: 'heart',
-              value: '72 BPM',
-              label: 'Heart Rate',
-              color: Color(0xFFFF677D),
-              chart: 'heart',
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 10),
-      const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _MetricCard(
-              icon: 'moon',
-              value: '7h 24m',
-              label: 'Sleep',
-              color: Color(0xFF9E83FF),
-              chart: 'sleep',
-            ),
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: _MetricCard(
-              icon: 'activity',
-              value: '328',
-              label: 'Active Calories',
-              color: Color(0xFFFFAD50),
-              chart: 'activity',
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 18),
-      for (final text in [
-        '24/7 health tracking',
-        'Understand your trends',
-        'Stay motivated every day',
-      ])
-        _CheckRow(text),
-    ],
-  );
+  // The cards show the user's real synced readings (steps today, latest
+  // heart rate and sleep) and zero/empty values before the first sync —
+  // never sample measurements.
+  Widget build(BuildContext context) =>
+      BlocBuilder<HealthCubit, HealthState>(
+        bloc: HealthCubit.instance,
+        builder: (context, health) {
+          final todaySteps = health.history(HealthMetricType.steps, 1);
+          final steps = todaySteps.isEmpty
+              ? 0
+              : todaySteps
+                    .map((reading) => reading.value)
+                    .reduce((a, b) => a > b ? a : b)
+                    .round();
+          final heartRate = health.latest(HealthMetricType.heartRate);
+          final sleep = health.latest(HealthMetricType.sleep);
+          final sleepMinutes = sleep == null
+              ? null
+              : (sleep.value * 60).round();
+          return Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _MetricCard(
+                      icon: 'steps',
+                      value: _grouped(steps),
+                      label: 'Steps',
+                      color: beamCyan,
+                      chart: 'steps',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _MetricCard(
+                      icon: 'heart',
+                      value: heartRate == null
+                          ? '--'
+                          : '${heartRate.value.round()} BPM',
+                      label: 'Heart Rate',
+                      color: const Color(0xFFFF677D),
+                      chart: 'heart',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _MetricCard(
+                      icon: 'moon',
+                      value: sleepMinutes == null
+                          ? '--'
+                          : '${sleepMinutes ~/ 60}h ${sleepMinutes % 60}m',
+                      label: 'Sleep',
+                      color: const Color(0xFF9E83FF),
+                      chart: 'sleep',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: _MetricCard(
+                      icon: 'activity',
+                      // The health model has no calorie metric, so this
+                      // stays at zero instead of a sample value.
+                      value: '0',
+                      label: 'Active Calories',
+                      color: Color(0xFFFFAD50),
+                      chart: 'activity',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              for (final text in [
+                '24/7 health tracking',
+                'Understand your trends',
+                'Stay motivated every day',
+              ])
+                _CheckRow(text),
+            ],
+          );
+        },
+      );
 }
 
 class _MetricCard extends StatelessWidget {
