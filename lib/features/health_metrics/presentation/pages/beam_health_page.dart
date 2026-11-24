@@ -2472,12 +2472,11 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       '0 cups',
     ];
     final rawValues = <double>[stepsToday, 0, sleepToday, 0];
-    final progress = (rawValues[i] / targets[i]).clamp(0, 1);
+    final progress = (rawValues[i] / targets[i]).clamp(0, 1).toDouble();
     const clinicianTargets = <double>[8000, 60, 7, 8];
-    final clinicianProgress = (rawValues[i] / clinicianTargets[i]).clamp(
-      0,
-      1,
-    );
+    final clinicianProgress = (rawValues[i] / clinicianTargets[i])
+        .clamp(0, 1)
+        .toDouble();
     return InkWell(
     onTap: clinician
         ? showInfo
