@@ -10,6 +10,7 @@ import '../../domain/health_sync_service.dart';
 import '../../../health_metrics/presentation/cubit/health_cubit.dart';
 import '../../../health_metrics/domain/health_reading.dart';
 import '../../data/native_device_repository.dart';
+import '../../data/hryfine_health_sync.dart';
 
 enum DevicePhase {
   noDevice,
@@ -59,6 +60,10 @@ class DeviceState {
 class DeviceCubit extends Cubit<DeviceState> with WidgetsBindingObserver {
   static final instance = DeviceCubit(
     NativeDeviceRepository(),
+    // Wiring only: the live app syncs through the real HryFine protocol
+    // implementation. The constructor default stays PendingVendorHealthSync
+    // so tests and previews keep the old behaviour.
+    healthSync: HryFineHealthSync(),
     persistReadings: HealthCubit.instance.store,
   );
   final DeviceRepository repository;
