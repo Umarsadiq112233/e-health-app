@@ -51,10 +51,14 @@ class NativeDeviceRepository implements DeviceRepository {
   @override
   Stream<DeviceInfo> scan() => _ble
       .scanForDevices(withServices: [], scanMode: ble.ScanMode.lowLatency)
+      // Only HryFine-family watches (including the H9 Max) are supported,
+      // so the scan emits nothing else: a device is listed only when its
+      // advertisement matches the HryFine identification — the
+      // manufacturer data ends with the bytes 0x12 0x34 (see
+      // PROTOCOL.md section 1). Every other nearby BLE device is dropped
+      // here instead of flooding the results list.
+      .where((d) => _isHryFineAdvertisement(d.manufacturerData))
       .map((d) {
-        // HryFine-family watches (including the H9 Max) identify
-        // themselves in the advertisement: the manufacturer data ends
-        // with the bytes 0x12 0x34 (see PROTOCOL.md section 1).
         final hryFine = _isHryFineAdvertisement(d.manufacturerData);
         final name = d.name.trim();
         return DeviceInfo(
