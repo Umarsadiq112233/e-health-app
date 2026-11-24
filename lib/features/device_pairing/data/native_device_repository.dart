@@ -51,7 +51,25 @@ class NativeDeviceRepository implements DeviceRepository {
   @override
   Stream<DeviceInfo> scan() => _ble
       .scanForDevices(withServices: [], scanMode: ble.ScanMode.lowLatency)
-      .map((d) => DeviceInfo(id: d.id, name: d.name.trim(), rssi: d.rssi));
+      .map((d) {
+        // HryFine-family watches (including the H9 Max) identify
+        // themselves in the advertisement: the manufacturer data ends
+        // with the bytes 0x12 0x34 (see PROTOCOL.md section 1).
+        final hryFine = _isHryFineAdvertisement(d.manufacturerData);
+        final name = d.name.trim();
+        return DeviceInfo(
+          id: d.id,
+          name: name,
+          rssi: d.rssi,
+          compatibilityVerified: hryFine,
+          verifiedName: hryFine && name.isNotEmpty ? name : null,
+        );
+      });
+
+  bool _isHryFineAdvertisement(List<int> manufacturerData) =>
+      manufacturerData.length >= 2 &&
+      manufacturerData[manufacturerData.length - 2] == 0x12 &&
+      manufacturerData[manufacturerData.length - 1] == 0x34;
   @override
   Stream<TransportState> connect(String id) => _ble
       .connectToDevice(id: id, connectionTimeout: const Duration(seconds: 12))
@@ -67,8 +85,11 @@ class NativeDeviceRepository implements DeviceRepository {
     await _ble.discoverAllServices(id).timeout(const Duration(seconds: 10));
     return (await _ble.getDiscoveredServices(id)).length;
   }
-  // TODO: Implement supported-device identification and vendor GATT operations
-  // only after the physical wearable and protocol documentation are provided.
-  // TODO: Decode captured packets into validated HealthReading objects. Do not
-  // read/write/subscribe to arbitrary characteristics or invent battery values.
+  // Supported-device identification is implemented above for the HryFine
+  // family (advertisement suffix 0x12 0x34). Vendor GATT operations and
+  // packet decoding into HealthReading objects live in
+  // data/hryfine_health_sync.dart and data/hryfine/, built from the
+  // reverse-engineered HryFine protocol (PROTOCOL.md). Battery values are
+  // still never invented: they are only reported when read from the
+  // standard Battery characteristic.
 }
