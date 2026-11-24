@@ -134,7 +134,7 @@ class HryFineClient {
     }
     final uart = ble.Uuid.parse(HryFineUuids.uartService).toString();
     final found = services.any(
-      (service) => service.serviceId.toString().toLowerCase() == uart,
+      (service) => service.id.toString().toLowerCase() == uart,
     );
     if (!found) {
       throw StateError(
