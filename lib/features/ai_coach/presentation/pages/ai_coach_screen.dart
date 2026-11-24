@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -6,6 +8,7 @@ import '../../../../shared/health_catalog.dart';
 import '../../../../shared/widgets/beam_ui.dart';
 import '../../../health_metrics/domain/health_reading.dart';
 import '../../../health_metrics/presentation/cubit/health_cubit.dart';
+import '../../data/ai_coach_service.dart';
 
 enum CoachView { home, chat, insights, suggestions, history }
 
@@ -38,9 +41,12 @@ class _AiCoachScreenState extends State<AiCoachScreen> {
   final input = TextEditingController();
   final scroll = ScrollController();
   final session = AppSessionCubit.instance;
+  final coachService = const AiCoachService();
   final dismissed = <String>{};
   String period = 'Today';
   String? conversationId;
+  bool _waiting = false;
+  bool _coachError = false;
   @override
   void initState() {
     super.initState();
@@ -70,6 +76,38 @@ class _AiCoachScreenState extends State<AiCoachScreen> {
       session.saveCoachMessage(conversationId!, text);
       input.clear();
     });
+    _scrollToBottom();
+    unawaited(_requestReply());
+  }
+
+  /// Asks the AI coach for a reply to the current conversation and stores
+  /// it; on failure the "Coach is unavailable" panel offers a retry.
+  Future<void> _requestReply() async {
+    final id = conversationId;
+    if (id == null || _waiting) return;
+    setState(() {
+      _waiting = true;
+      _coachError = false;
+    });
+    try {
+      final stored = session.coachConversations[id] ?? <String>[];
+      final text = await coachService.reply(
+        storedMessages: List.of(stored),
+      );
+      if (!mounted) return;
+      session.saveCoachReply(id, text);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _coachError = true);
+    } finally {
+      if (mounted) {
+        setState(() => _waiting = false);
+        _scrollToBottom();
+      }
+    }
+  }
+
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (scroll.hasClients) {
         scroll.animateTo(
@@ -329,29 +367,44 @@ class _AiCoachScreenState extends State<AiCoachScreen> {
                   ),
                   const SizedBox(height: 20),
                   for (final text in messages) ...[
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 270),
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF087DF7), Color(0xFF00BDEB)],
-                          ),
+                    if (text.startsWith('ai:'))
+                      panel(
+                        Text(
+                          text.substring(3),
+                          style: const TextStyle(fontSize: 14),
                         ),
-                        child: Text(
-                          text,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+                      )
+                    else
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 270),
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF087DF7), Color(0xFF00BDEB)],
+                            ),
+                          ),
+                          child: Text(
+                            text,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 14),
                   ],
-                  if (messages.isNotEmpty)
+                  if (_waiting)
+                    panel(
+                      const Text(
+                        'Coach is typing…',
+                        style: TextStyle(color: beamMuted, fontSize: 13),
+                      ),
+                    ),
+                  if (_coachError)
                     panel(
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,14 +419,7 @@ class _AiCoachScreenState extends State<AiCoachScreen> {
                             style: TextStyle(color: beamMuted, fontSize: 13),
                           ),
                           TextButton(
-                            onPressed: () => ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'AI service is not configured.',
-                                    ),
-                                  ),
-                                ),
+                            onPressed: () => unawaited(_requestReply()),
                             child: const Text('Retry'),
                           ),
                         ],
