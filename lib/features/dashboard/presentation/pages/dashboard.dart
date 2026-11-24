@@ -47,7 +47,13 @@ class Dashboard extends StatelessWidget {
     this.deviceCubit,
   });
   @override
-  Widget build(BuildContext context) => BeamHome(open: open);
+  // BeamHome reads HealthCubit.instance.state for its values; this
+  // builder rebuilds it whenever synced readings change.
+  Widget build(BuildContext context) =>
+      BlocBuilder<HealthCubit, HealthState>(
+        bloc: healthCubit ?? HealthCubit.instance,
+        builder: (context, _) => BeamHome(open: open),
+      );
 
   Widget legacyBuild(
     BuildContext context,
