@@ -46,11 +46,16 @@ class AiCoachService {
     final state = HealthCubit.instance.state;
     if (state.readings.isEmpty) return '';
     final now = DateTime.now();
-    final stepsToday = state.readings
-        .where(
-          (r) => r.metric == HealthMetricType.steps && _isToday(r.timestamp, now),
-        )
-        .fold<double>(0, (sum, r) => sum + r.value);
+    // Step readings are cumulative daily totals, so — like the health
+    // screens — the day's value is the largest reading, not the sum.
+    var stepsToday = 0.0;
+    for (final r in state.readings) {
+      if (r.metric == HealthMetricType.steps &&
+          _isToday(r.timestamp, now) &&
+          r.value > stepsToday) {
+        stepsToday = r.value;
+      }
+    }
     final heartRate = state.latest(HealthMetricType.heartRate);
     final sleep = state.latest(HealthMetricType.sleep);
     final parts = <String>[
