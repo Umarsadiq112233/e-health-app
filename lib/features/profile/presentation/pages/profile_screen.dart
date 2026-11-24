@@ -12,7 +12,7 @@ import '../../domain/models/account_profile.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../device_pairing/presentation/cubit/device_cubit.dart';
+import '../../../device_pairing/presentation/cubit/device_cubit.dart';
 
 class ProfileScreen extends StatelessWidget {
   final ValueChanged<String> open;
