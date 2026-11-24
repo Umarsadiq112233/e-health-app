@@ -37,6 +37,13 @@ class AppSessionCubit extends Cubit<AppSessionState> {
     _publish();
   }
 
+  /// Coach replies are stored with an 'ai:' prefix so the chat screen can
+  /// tell them apart from the user's own messages.
+  void saveCoachReply(String id, String text) {
+    coachConversations.putIfAbsent(id, () => []).add('ai:$text');
+    _publish();
+  }
+
   void deleteCoachConversation(String id) {
     coachConversations.remove(id);
     _publish();
