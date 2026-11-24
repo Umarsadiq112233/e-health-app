@@ -1236,7 +1236,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           : values.reduce((a, b) => a > b ? a : b);
       // Share of the day's real samples in each band: Resting <60,
       // Normal 60–99, Elevated 100–119, High ≥120 BPM.
-      String zone(double Function(double) test) {
+      String zone(bool Function(double) test) {
         if (values.isEmpty) return '—';
         final count = values.where(test).length;
         return '${(count / values.length * 100).round()}%';
