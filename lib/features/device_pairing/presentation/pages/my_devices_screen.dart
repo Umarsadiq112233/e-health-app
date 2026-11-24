@@ -82,6 +82,11 @@ class MyDevicesScreen extends StatelessWidget {
                   state.phase == DevicePhase.connected ||
                   state.phase == DevicePhase.syncing ||
                   state.phase == DevicePhase.syncCompleted;
+              // A device card is only shown for a real connection: a
+              // connected phase with an actual device from the cubit.
+              // Anything else gets the empty state below — the screen
+              // never presents a watch that is not connected.
+              final hasDevice = connected && state.device != null;
               final battery = state.device?.battery;
               final lastSync = state.device?.lastSynced;
               final synced = lastSync == null
@@ -118,6 +123,7 @@ class MyDevicesScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (hasDevice) ...[
                       _panel(
                         child: Column(
                           children: [
@@ -228,18 +234,18 @@ class MyDevicesScreen extends StatelessWidget {
                                                 context,
                                                 DeviceView.dashboard,
                                               ),
-                                              child: const Text(
-                                                'E Health Watch',
-                                                style: TextStyle(
+                                              child: Text(
+                                                state.device!.displayName,
+                                                style: const TextStyle(
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.w700,
                                                 ),
                                               ),
                                             ),
                                             const SizedBox(height: 7),
-                                            const Text(
-                                              'Pulse Watch',
-                                              style: TextStyle(
+                                            Text(
+                                              state.device!.shortIdentifier,
+                                              style: const TextStyle(
                                                 color: Color(0xFFC3CEE0),
                                                 fontSize: 14,
                                                 height: 1.4,
@@ -413,6 +419,8 @@ class MyDevicesScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      ] else
+                        _emptyPanel(context, device, state),
                       const SizedBox(height: 14),
                       Container(
                         decoration: BoxDecoration(
@@ -468,6 +476,44 @@ class MyDevicesScreen extends StatelessWidget {
       ),
     );
   }
+
+  /// Empty state for when no watch is connected, built from this
+  /// screen's own panel, orb and button components. Its button starts
+  /// the same scan/connect flow as Add Device.
+  Widget _emptyPanel(
+    BuildContext context,
+    DeviceCubit device,
+    DeviceState state,
+  ) => _panel(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(18, 30, 18, 30),
+      child: Column(
+        children: [
+          const _Orb('watch', size: 64),
+          const SizedBox(height: 16),
+          const Text(
+            'No device connected',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Connect your watch to start syncing health data.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFFB6C6DE),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 20),
+          BeamButton(
+            'Connect Device',
+            onPressed: state.busy ? null : () => _pair(context, device),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _panel({required Widget child}) => Container(
     clipBehavior: Clip.antiAlias,
