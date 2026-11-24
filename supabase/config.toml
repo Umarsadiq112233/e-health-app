@@ -1,4 +1,4 @@
-project_id = "e-health-app"
+project_id = "oamqpmqlydxmxeeipyha"
 
 [auth]
 site_url = "http://localhost:3000"

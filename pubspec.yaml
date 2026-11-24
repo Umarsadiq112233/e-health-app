@@ -75,7 +75,6 @@ flutter:
     - assets/beam/icons/
     - assets/images/logo.png
     - assets/icons/connect/
-    - assets/video/splash-transparent.webp
     - assets/ring/e-sync-silver-titanium-ring.png
     - assets/images/onboarding-welcome-hand.png
     - assets/images/onboarding-introduction.png
@@ -121,3 +120,5 @@ flutter:
 dependency_overrides:
   reactive_ble_mobile:
     path: vendor/reactive_ble_mobile
+  health:
+    path: vendor/health

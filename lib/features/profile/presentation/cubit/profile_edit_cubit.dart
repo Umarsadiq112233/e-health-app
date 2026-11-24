@@ -182,7 +182,7 @@ class ProfileEditCubit extends Cubit<ProfileEditState> {
     );
   }
 
-  Future<bool> save() async {
+  Future<bool> save({DateTime? birthDate}) async {
     if (!state.canSave) return false;
     final draft = state;
     emit(
@@ -197,6 +197,7 @@ class ProfileEditCubit extends Cubit<ProfileEditState> {
         draft.profile!,
         name: draft.name,
         weight: draft.weight,
+        birthDate: birthDate,
         avatarEdit: draft.avatarEdit,
         photo: draft.photo,
       );

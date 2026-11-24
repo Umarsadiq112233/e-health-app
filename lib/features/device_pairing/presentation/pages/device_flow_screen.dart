@@ -23,15 +23,21 @@ class DeviceFlowScreen extends StatelessWidget {
     required this.view,
     this.controller,
     this.target,
+    this.onCompleted,
   });
   final DeviceView view;
   final DeviceCubit? controller;
   final DeviceInfo? target;
+  final Future<void> Function()? onCompleted;
   DeviceCubit get device => controller ?? DeviceCubit.instance;
   void open(BuildContext context, DeviceView next, {bool replace = false}) {
     final route = MaterialPageRoute<void>(
-      builder: (_) =>
-          DeviceFlowScreen(view: next, controller: device, target: target),
+      builder: (_) => DeviceFlowScreen(
+        view: next,
+        controller: device,
+        target: target,
+        onCompleted: onCompleted,
+      ),
     );
     if (replace) {
       Navigator.of(context).pushReplacement(route);
@@ -308,6 +314,16 @@ class DeviceFlowScreen extends StatelessWidget {
                     child: const Text('Sync Later'),
                   ),
                 );
+                if (onCompleted != null) {
+                  content.add(
+                    BeamButton(
+                      'Finish Setup',
+                      onPressed: () async {
+                        await onCompleted!.call();
+                      },
+                    ),
+                  );
+                }
               case DeviceView.dashboard:
                 content.add(identity(watch, connected, lastSync, large: true));
                 content.add(

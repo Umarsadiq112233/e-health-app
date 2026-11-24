@@ -18,6 +18,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(fontFamily: 'EHealth'),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
           home: const MainShell(),
         ),
       );
@@ -28,7 +32,7 @@ void main() {
         tester
             .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
             .selected,
-        2,
+        1,
       );
       expect(find.text('Scan Food'), findsWidgets);
       await tester.tap(find.byTooltip('Open AI Coach'));
@@ -45,7 +49,7 @@ void main() {
         tester
             .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
             .selected,
-        3,
+        2,
       );
       await tester.tap(find.text('Care'));
       await tester.pumpAndSettle();
@@ -54,7 +58,7 @@ void main() {
         tester
             .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
             .selected,
-        4,
+        3,
       );
       await tester.tap(find.byTooltip('Open AI Coach'));
       await tester.pumpAndSettle();

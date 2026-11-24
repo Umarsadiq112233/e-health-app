@@ -120,7 +120,7 @@ void main() {
     },
   );
 
-  testWidgets('Signup requires explicit consent and retains OTP verification', (
+  testWidgets('Signup requires consent and verifies with an email link', (
     tester,
   ) async {
     final repo = FakeAuthRepository();
@@ -154,8 +154,7 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await press(tester, 'Create Account');
     expect(find.text('Verify Your Email'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField), '123456');
-    await press(tester, 'Verify Email');
+    await press(tester, 'I’ve Verified My Email');
     expect(repo.verificationCalls, 1);
     expect(bloc.state.status, AuthStatus.signedIn);
     await tester.pumpWidget(const SizedBox());

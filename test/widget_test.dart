@@ -29,11 +29,18 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(
-        MaterialApp(theme: buildTheme(), home: const MainShell()),
+        MaterialApp(
+          theme: buildTheme(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: const MainShell(),
+        ),
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      for (final label in ['Trends', 'Goals', 'Insights', 'Profile']) {
+      for (final label in ['Home', 'Scan Food', 'Device', 'Care', 'Profile']) {
         await tester.tap(find.text(label).last);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

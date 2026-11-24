@@ -15,6 +15,7 @@ import '../core/config/supabase_config.dart';
 import '../shared/widgets/artwork.dart';
 import '../features/auth/data/repositories/supabase_auth_repository.dart';
 import '../features/profile/data/repositories/supabase_profile_repository.dart';
+import '../features/profile/domain/models/account_profile.dart';
 import '../features/profile/domain/repositories/profile_repository.dart';
 import '../features/auth/domain/repositories/auth_repository.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
@@ -25,7 +26,7 @@ import '../features/onboarding/presentation/pages/onboarding_flow.dart';
 import '../features/onboarding/presentation/pages/splash_page.dart';
 import '../shared/widgets/beam_ui.dart';
 import '../features/setup/presentation/pages/setup_page.dart';
-import '../features/device_pairing/presentation/pages/pairing_flow.dart';
+import '../features/device_pairing/presentation/pages/discover_devices_screen.dart';
 import 'navigation/main_shell.dart';
 import 'state/app_session_cubit.dart';
 import '../features/health_metrics/presentation/cubit/health_cubit.dart';
@@ -242,6 +243,10 @@ class _AppViewState extends State<_AppView> with WidgetsBindingObserver {
         user.email,
         setup.profileComplete ? setup.weight : user.weight,
       );
+      session.profileDetails(
+        birthDate: parseBirthDate(setup.wellness['birthday']),
+        gender: setup.wellness['gender']?.toString(),
+      );
       session.profilePhoto(setup.avatarDisplayUrl, setup.avatarPath);
     }
   }
@@ -345,6 +350,7 @@ class _AppViewState extends State<_AppView> with WidgetsBindingObserver {
 
 class _FlowGate extends StatelessWidget {
   const _FlowGate();
+
   @override
   Widget build(BuildContext context) => BlocBuilder<AuthBloc, AuthState>(
     builder: (context, auth) => BlocBuilder<AppFlowCubit, AppFlowState>(
@@ -377,8 +383,9 @@ class _FlowGate extends StatelessWidget {
                     children: [
                       Text(progress.error!, textAlign: TextAlign.center),
                       FilledButton(
-                        onPressed: () =>
-                            flow.bindUser(auth.user!.id, reload: true),
+                        onPressed: progress.loading
+                            ? null
+                            : () => flow.bindUser(auth.user!.id, reload: true),
                         child: const Text('Retry'),
                       ),
                       TextButton(
@@ -415,10 +422,8 @@ class _FlowGate extends StatelessWidget {
             progress.setup.wellness['reviewed'] != true) {
           screen = const SetupCompletePage(key: ValueKey('setup-summary'));
         } else if (!progress.setup.deviceComplete) {
-          screen = PairingFlow(
+          screen = DiscoverDevicesScreen(
             key: ValueKey('device-setup-${auth.user?.id}'),
-            initialStep: progress.setup.pairingStep,
-            onStepChanged: flow.savePairingStep,
             onCompleted: flow.finishDevice,
           );
         } else {

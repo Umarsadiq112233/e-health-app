@@ -24,6 +24,7 @@ ThemeData beamTheme(BuildContext context) {
       outlineVariant: beamBorder,
       error: Color(0xFFFF8696),
     ),
+    dividerColor: beamBorder,
     textTheme: base.textTheme.apply(
       bodyColor: Colors.white,
       displayColor: Colors.white,
@@ -139,7 +140,7 @@ class BeamTabHeader extends StatelessWidget {
     required this.title,
     this.trailing,
     this.subtitle,
-    this.padding = const EdgeInsets.fromLTRB(16, 14, 16, 10),
+    this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 10),
   });
 
   final String title;
@@ -150,50 +151,61 @@ class BeamTabHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: padding,
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'E-HEALTH',
-                style: TextStyle(
-                  color: beamCyan,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2.5,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  height: 1.05,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 5),
-                Text(
-                  subtitle!,
-                  style: const TextStyle(
-                    color: beamMuted,
-                    fontSize: 14,
-                    height: 1.25,
+    child: SizedBox(
+      height: subtitle == null ? 52 : 64,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: BeamLogo(width: 92, horizontal: true, textScale: 2),
+          ),
+          if (trailing != null)
+            Align(alignment: Alignment.centerRight, child: trailing),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 104),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 27,
+                            height: 1.05,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle!,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: beamMuted,
+                            fontSize: 12,
+                            height: 1.15,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-      ],
+        ],
+      ),
     ),
   );
 }
@@ -229,6 +241,29 @@ class BeamIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SvgPicture.asset(
     'assets/beam/icons/$name.svg',
+    width: size,
+    height: size,
+    colorFilter: color == null
+        ? null
+        : ColorFilter.mode(color!, BlendMode.srcIn),
+    excludeFromSemantics: true,
+  );
+}
+
+class BeamAssetIcon extends StatelessWidget {
+  const BeamAssetIcon(
+    this.asset, {
+    super.key,
+    this.size = 24,
+    this.color = beamCyan,
+  });
+  final String asset;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => SvgPicture.asset(
+    asset,
     width: size,
     height: size,
     colorFilter: color == null
@@ -332,17 +367,24 @@ class _BeamMarkPainter extends CustomPainter {
 }
 
 class BeamLogo extends StatelessWidget {
-  const BeamLogo({super.key, this.width = 102, this.horizontal = false});
+  const BeamLogo({
+    super.key,
+    this.width = 102,
+    this.horizontal = false,
+    this.textScale = 1,
+  });
   final double width;
   final bool horizontal;
+  final double textScale;
   @override
   Widget build(BuildContext context) {
     final name = Text(
       'E Health',
+      maxLines: 1,
       textScaler: TextScaler.noScaling,
       style: TextStyle(
-        color: Colors.white,
-        fontSize: width * (horizontal ? .09 : .14),
+        color: beamCyan,
+        fontSize: width * (horizontal ? .09 : .14) * textScale,
         fontWeight: FontWeight.w400,
         letterSpacing: width * (horizontal ? .01 : .025),
         height: 1.15,
@@ -350,13 +392,24 @@ class BeamLogo extends StatelessWidget {
     );
     final care = Text(
       'WELLNESS',
+      maxLines: 1,
       textScaler: TextScaler.noScaling,
       style: TextStyle(
         color: beamMuted,
-        fontSize: width * (horizontal ? .04 : .055),
+        fontSize: width * (horizontal ? .04 : .055) * textScale,
         letterSpacing: width * .035,
         height: 1.4,
       ),
+    );
+    final horizontalName = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: name,
+    );
+    final horizontalCare = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: care,
     );
     return Semantics(
       label: 'E Health Care',
@@ -368,9 +421,12 @@ class BeamLogo extends StatelessWidget {
                   children: [
                     BeamMark(size: width * .25),
                     SizedBox(width: width * .065),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [name, care],
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [horizontalName, horizontalCare],
+                      ),
                     ),
                   ],
                 )

@@ -6,9 +6,11 @@ class FakeProfileRepository
     implements ProfileRepository, AccountProfileRepository {
   final Map<String, SetupProgress> records = {};
   bool failLoad = false, failSave = false;
+  Object? loadError;
   @override
   Future<SetupProgress> load(String userId) async {
     if (failLoad) throw StateError('offline');
+    if (loadError != null) throw loadError!;
     return records.putIfAbsent(userId, () => const SetupProgress());
   }
 
@@ -26,6 +28,7 @@ class FakeProfileRepository
       name: setup.name,
       weight: setup.weight,
       email: 'sara@example.com',
+      birthDate: parseBirthDate(setup.wellness['birthday']),
       avatarPath: setup.avatarPath,
       legacyAvatarUrl: setup.avatarUrl,
     );
@@ -44,6 +47,7 @@ class FakeProfileRepository
     AccountProfile before, {
     required String name,
     required String weight,
+    DateTime? birthDate,
     required AvatarEdit avatarEdit,
     AvatarPhoto? photo,
   }) async {
@@ -71,7 +75,10 @@ class FakeProfileRepository
         deviceComplete: previous.deviceComplete,
         pairingStep: previous.pairingStep,
         permissions: previous.permissions,
-        wellness: previous.wellness,
+        wellness: {
+          ...previous.wellness,
+          if (birthDate != null) 'birthday': birthDateValue(birthDate),
+        },
         avatarPath: path,
         avatarUrl: legacy,
       ),
@@ -82,6 +89,7 @@ class FakeProfileRepository
         name: name.trim(),
         weight: weight.trim(),
         email: before.email,
+        birthDate: birthDate ?? before.birthDate,
         avatarPath: path,
         legacyAvatarUrl: legacy,
       ),

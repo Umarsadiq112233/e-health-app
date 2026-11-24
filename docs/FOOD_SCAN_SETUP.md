@@ -1,21 +1,21 @@
 # Food Scan setup
 
 The Flutter app opens the camera, converts the captured JPEG to a data URL,
-and posts it to the project's Supabase Edge Function:
+and posts it to the existing working nutrition Supabase Edge Function:
 
-`https://<project-ref>.supabase.co/functions/v1/analyze-meal`
+`https://bnineticuomwftfnjhrk.supabase.co/functions/v1/analyze-meal-ingredients-v8`
 
-The app never contains a provider API key. Deploy the function and set its
-secret before testing a real scan:
+The app never contains a provider API key. The existing scanner function must
+already have its provider secret configured on its own Supabase project. No
+new `analyze-meal` function deployment is required for the current app.
 
-```sh
-supabase secrets set OPENAI_API_KEY=your-key
-supabase functions deploy analyze-meal
-```
+The Flutter client sends only that function project's public anon/publishable
+key and never sends the provider secret. This endpoint is intentionally kept
+as the scanner's existing nutrition backend; the app's Auth/profile data still
+uses the configured E-Health Supabase project.
 
-The default model is `gpt-4o-mini`. It can be changed with the server-side
-`FOOD_VISION_MODEL` secret. For a different backend, pass the endpoint at
-build time without changing Dart code:
+For a different backend, pass the endpoint at build time without changing Dart
+code:
 
 ```sh
 flutter run --dart-define=NUTRITION_ANALYSIS_URL=https://example.com/analyze

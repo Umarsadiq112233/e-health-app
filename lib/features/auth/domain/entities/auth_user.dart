@@ -23,5 +23,6 @@ class AuthSessionChange {
 
 class AuthFailure implements Exception {
   final String message;
-  const AuthFailure(this.message);
+  final bool requiresEmailVerification;
+  const AuthFailure(this.message, {this.requiresEmailVerification = false});
 }

@@ -79,26 +79,37 @@ class _HealthChartState extends State<HealthChart> {
           ),
           const SizedBox(height: 10),
           LayoutBuilder(
-            builder: (context, box) => GestureDetector(
-              onTapDown: (event) => setState(
-                () => selected = readings.length == 1
-                    ? 0
-                    : ((event.localPosition.dx - 12) /
-                              math.max(1, box.maxWidth - 24) *
-                              (readings.length - 1))
-                          .round()
-                          .clamp(0, readings.length - 1),
+            builder: (context, box) => TweenAnimationBuilder<double>(
+              key: ValueKey(
+                '${widget.period}-${readings.map((r) => '${r.identity}:${r.value}').join('|')}',
               ),
-              child: SizedBox(
-                height: 150,
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: _ReadingPainter(
-                    readings,
-                    widget.color,
-                    Theme.of(context).dividerColor,
-                    widget.bars,
-                    selected,
+              tween: Tween(begin: 0, end: 1),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 650),
+              curve: Curves.easeOutCubic,
+              builder: (context, progress, child) => GestureDetector(
+                onTapDown: (event) => setState(
+                  () => selected = readings.length == 1
+                      ? 0
+                      : ((event.localPosition.dx - 12) /
+                                math.max(1, box.maxWidth - 24) *
+                                (readings.length - 1))
+                            .round()
+                            .clamp(0, readings.length - 1),
+                ),
+                child: SizedBox(
+                  height: 150,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _ReadingPainter(
+                      readings,
+                      widget.color,
+                      Theme.of(context).dividerColor,
+                      widget.bars,
+                      selected,
+                      progress,
+                    ),
                   ),
                 ),
               ),
@@ -121,12 +132,14 @@ class _ReadingPainter extends CustomPainter {
   final Color color, grid;
   final bool bars;
   final int? selected;
+  final double progress;
   _ReadingPainter(
     this.readings,
     this.color,
     this.grid,
     this.bars,
     this.selected,
+    this.progress,
   );
   @override
   void paint(Canvas canvas, Size size) {
@@ -170,7 +183,10 @@ class _ReadingPainter extends CustomPainter {
       if (bars) {
         canvas.drawLine(
           Offset(point.dx, size.height - 12),
-          point,
+          Offset(
+            point.dx,
+            size.height - 12 + (point.dy - (size.height - 12)) * progress,
+          ),
           Paint()
             ..color = color
             ..strokeWidth = math.min(10, size.width / (points.length * 2)),
@@ -179,13 +195,20 @@ class _ReadingPainter extends CustomPainter {
         path.lineTo(point.dx, point.dy);
       }
     }
-    if (!bars && points.length > 1) canvas.drawPath(path, paint);
+    if (!bars && points.length > 1) {
+      for (final metric in path.computeMetrics()) {
+        canvas.drawPath(metric.extractPath(0, metric.length * progress), paint);
+      }
+    }
     for (int i = 0; i < points.length; i++) {
-      canvas.drawCircle(
-        points[i],
-        i == selected ? 5 : 3,
-        Paint()..color = color,
-      );
+      final markerProgress = points.length == 1 ? 1.0 : i / (points.length - 1);
+      if (progress >= markerProgress) {
+        canvas.drawCircle(
+          points[i],
+          i == selected ? 5 : 3,
+          Paint()..color = color,
+        );
+      }
     }
   }
 
@@ -194,7 +217,8 @@ class _ReadingPainter extends CustomPainter {
       old.readings != readings ||
       old.selected != selected ||
       old.color != color ||
-      old.grid != grid;
+      old.grid != grid ||
+      old.progress != progress;
 }
 
 /// Sleep stage decoding requires a vendor protocol; no fabricated stage chart.

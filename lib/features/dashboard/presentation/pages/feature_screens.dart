@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../health_metrics/domain/health_reading.dart';
 import '../../../health_metrics/presentation/cubit/health_cubit.dart';
 import '../../../../app/state/app_session_cubit.dart';
+import '../../../../shared/widgets/beam_ui.dart';
 import '../../../../shared/widgets/components.dart';
 
 class TrendsScreen extends StatefulWidget {
@@ -317,71 +318,379 @@ class ReportScreen extends StatefulWidget {
 class _ReportState extends State<ReportScreen> {
   String period = 'Week';
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Health Report')),
-    body: SafeArea(
-      child: BlocBuilder<HealthCubit, HealthState>(
-        bloc: HealthCubit.instance,
-        builder: (context, health) => ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            Center(
-              child: PeriodSelector(
-                selected: period,
-                onChanged: (value) => setState(() => period = value),
-              ),
-            ),
-            Text(
-              period == 'Day'
-                  ? 'Today'
+  Widget build(BuildContext context) => Theme(
+    data: beamTheme(context),
+    child: Scaffold(
+      backgroundColor: beamNavy,
+      body: SafeArea(
+        child: BlocBuilder<HealthCubit, HealthState>(
+          bloc: HealthCubit.instance,
+          builder: (context, health) => LayoutBuilder(
+            builder: (context, constraints) {
+              final days = period == 'Day'
+                  ? 1
                   : period == 'Week'
-                  ? 'Last 7 days'
-                  : 'Last 30 days',
-              style: AppTypography.subtitle,
-            ),
-            if (health.phase == HealthPhase.loading)
-              const LinearProgressIndicator(),
-            if (health.error != null) ...[
-              Text(health.error!),
-              TextButton(
-                onPressed: HealthCubit.instance.refresh,
-                child: const Text('Try Again'),
-              ),
-            ],
-            if (health.readings.isEmpty)
-              const Panel(
-                child: EmptyState(
-                  'No report available yet. Reports require real recorded health data.',
-                ),
-              ),
-            for (int i = 0; i < HealthCatalog.metrics.length; i++)
-              Panel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      HealthCatalog.metrics[i].name,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                  ? 7
+                  : 30;
+              final columns = constraints.maxWidth >= 640 ? 2 : 1;
+              final gap = columns == 2 ? 12.0 : 0.0;
+              final cardWidth = columns == 2
+                  ? (constraints.maxWidth - gap) / columns
+                  : constraints.maxWidth;
+              final motionOff = MediaQuery.disableAnimationsOf(context);
+
+              return ListView(
+                padding: const EdgeInsets.only(bottom: 28),
+                children: [
+                  BeamTabHeader(
+                    title: 'Health Report',
+                    subtitle: 'Your recorded wellness history',
+                    trailing: BeamHeaderAction(
+                      icon: Icons.arrow_back_rounded,
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).maybePop(),
                     ),
-                    HealthChart(
-                      readings: health.history(
-                        HealthMetricType.values[i],
-                        period == 'Day'
-                            ? 1
-                            : period == 'Week'
-                            ? 7
-                            : 30,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: _ReportPeriodSelector(
+                      selected: period,
+                      onChanged: (value) => setState(() => period = value),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _periodTitle(period),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          health.readings.isEmpty
+                              ? 'No synced data'
+                              : '${health.readings.length} readings',
+                          style: const TextStyle(
+                            color: beamMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (health.phase == HealthPhase.loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 18),
+                      child: _ReportLoadingBar(),
+                    ),
+                  if (health.error != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _ReportMessageCard(
+                        icon: Icons.sync_problem_rounded,
+                        title: 'Unable to load your report',
+                        message: health.error!,
+                        action: TextButton(
+                          onPressed: HealthCubit.instance.refresh,
+                          child: const Text('Try again'),
+                        ),
                       ),
-                      color: HealthCatalog.metrics[i].color,
                     ),
-                  ],
-                ),
-              ),
-          ],
+                  if (health.readings.isEmpty)
+                    _ReportAnimatedCard(
+                      index: 0,
+                      child: const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: _ReportMessageCard(
+                          icon: Icons.insights_rounded,
+                          title: 'Your report will appear here',
+                          message: 'Connect and sync a device to build a report from your real health measurements.',
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AnimatedSwitcher(
+                      duration: motionOff
+                          ? Duration.zero
+                          : const Duration(milliseconds: 380),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: Wrap(
+                        key: ValueKey(period),
+                        spacing: gap,
+                        runSpacing: 12,
+                        children: [
+                          for (int i = 0; i < HealthCatalog.metrics.length; i++)
+                            SizedBox(
+                              width: cardWidth,
+                              child: _ReportAnimatedCard(
+                                index: i + 1,
+                                child: _ReportMetricCard(
+                                  metric: HealthCatalog.metrics[i],
+                                  period: period,
+                                  readings: health.history(
+                                    HealthMetricType.values[i],
+                                    days,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     ),
   );
+}
+
+String _periodTitle(String period) => switch (period) {
+  'Day' => 'Today',
+  'Week' => 'Last 7 days',
+  _ => 'Last 30 days',
+};
+
+class _ReportPeriodSelector extends StatelessWidget {
+  const _ReportPeriodSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 52,
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: const Color(0xFF06283B),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: beamBorder),
+    ),
+    child: Row(
+      children: [
+        for (final option in const ['Day', 'Week', 'Month'])
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: selected == option,
+              label: '$option report period',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => onChanged(option),
+                child: AnimatedContainer(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: selected == option ? beamCyan : Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    option,
+                    style: TextStyle(
+                      color: selected == option ? beamNavy : beamMuted,
+                      fontSize: 14,
+                      fontWeight: selected == option
+                          ? FontWeight.w800
+                          : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _ReportMetricCard extends StatelessWidget {
+  const _ReportMetricCard({
+    required this.metric,
+    required this.period,
+    required this.readings,
+  });
+  final Metric metric;
+  final String period;
+  final List<HealthReading> readings;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF06283B), Color(0xFF031D2D)],
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: metric.color.withValues(alpha: .40)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x35000000),
+          blurRadius: 18,
+          offset: Offset(0, 8),
+        ),
+      ],
+    ),
+    padding: const EdgeInsets.fromLTRB(16, 15, 16, 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: metric.color.withValues(alpha: .16),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(metric.icon, color: metric.color, size: 19),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                metric.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              _periodShortLabel(period),
+              style: const TextStyle(
+                color: beamMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        HealthChart(
+          key: ValueKey('${metric.name}-$period-${readings.length}'),
+          metric: HealthCatalog.metrics.indexOf(metric),
+          period: period,
+          color: metric.color,
+          readings: readings,
+        ),
+      ],
+    ),
+  );
+}
+
+String _periodShortLabel(String period) => switch (period) {
+  'Day' => '24 hours',
+  'Week' => '7 days',
+  _ => '30 days',
+};
+
+class _ReportMessageCard extends StatelessWidget {
+  const _ReportMessageCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.action,
+  });
+  final IconData icon;
+  final String title, message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: const Color(0xFF06283B),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: beamBorder),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: beamCyan, size: 28),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message,
+                style: const TextStyle(color: beamMuted, height: 1.4),
+              ),
+              if (action != null) ...[const SizedBox(height: 4), action!],
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ReportLoadingBar extends StatelessWidget {
+  const _ReportLoadingBar();
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(8),
+    child: const LinearProgressIndicator(
+      minHeight: 4,
+      backgroundColor: Color(0xFF17435A),
+      color: beamCyan,
+    ),
+  );
+}
+
+class _ReportAnimatedCard extends StatelessWidget {
+  const _ReportAnimatedCard({required this.index, required this.child});
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 300 + index * 70),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 10),
+          child: child,
+        ),
+      ),
+    );
+  }
 }
 
 class NotificationsScreen extends StatefulWidget {

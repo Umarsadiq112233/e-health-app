@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/widgets/beam_ui.dart';
 import '../../../ai_coach/presentation/pages/ai_coach_screen.dart';
 import '../../data/food_analysis_service.dart';
+import '../../data/food_scan_history_store.dart';
 import '../widgets/food_camera_screen.dart';
 
 class FoodScanScreen extends StatefulWidget {
@@ -19,10 +21,27 @@ class FoodScanScreen extends StatefulWidget {
 class _FoodScanScreenState extends State<FoodScanScreen> {
   late final FoodAnalysisService _service =
       widget.service ?? FoodAnalysisService();
+  final FoodScanHistoryStore _historyStore = FoodScanHistoryStore();
   Uint8List? _imageBytes;
   FoodAnalysisResult? _result;
+  List<FoodScanHistoryEntry> _history = const [];
   String? _error;
   bool _isScanning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final history = await _historyStore.load();
+      if (mounted) setState(() => _history = history);
+    } on Exception {
+      // History should never prevent the camera and live analysis from working.
+    }
+  }
 
   @override
   void dispose() {
@@ -61,6 +80,17 @@ class _FoodScanScreenState extends State<FoodScanScreen> {
     try {
       final result = await _service.analyze(bytes);
       if (mounted) setState(() => _result = result);
+
+      // Persist the completed nutrition result independently from the current
+      // screen, so it remains available after navigation or app restart.
+      try {
+        final savedEntry = await _historyStore.add(result);
+        if (mounted) {
+          setState(() => _history = [savedEntry, ..._history]);
+        }
+      } on Exception {
+        // A storage issue must not hide a successful analysis from the user.
+      }
     } on FoodAnalysisException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } on Exception catch (error) {
@@ -78,39 +108,176 @@ class _FoodScanScreenState extends State<FoodScanScreen> {
     return 'Could not open the camera. Please check camera permission and try again.';
   }
 
-  void _showScanHistory() {
+  Future<void> _showScanHistory() async {
+    await _loadHistory();
+    if (!mounted) return;
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: beamNavy,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
+      isScrollControlled: true,
+      builder: _buildHistorySheet,
+    );
+  }
+
+  Widget _buildHistorySheet(BuildContext context) => SafeArea(
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .78,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Scan history',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  '${_history.length} saved',
+                  style: const TextStyle(color: beamMuted, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Your analyzed meals are saved securely on this device.',
+              style: TextStyle(color: beamMuted, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _history.isEmpty
+                  ? _buildEmptyHistory(context)
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      itemCount: _history.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (_, index) =>
+                          _buildHistoryEntry(_history[index], context),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildEmptyHistory(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: beamCyan.withValues(alpha: .1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.history_rounded, color: beamCyan, size: 28),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'No scans yet',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Complete your first food scan and it will appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: beamMuted, fontSize: 13, height: 1.4),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _takePhoto();
+            },
+            icon: const Icon(Icons.camera_alt_rounded),
+            label: const Text('Scan a meal'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildHistoryEntry(
+    FoodScanHistoryEntry entry,
+    BuildContext context,
+  ) => Container(
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: const Color(0xFF032235),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: beamBorder),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: beamCyan.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.restaurant_rounded, color: beamCyan),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Scan history',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+              Text(
+                entry.mealName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${MaterialLocalizations.of(context).formatShortDate(entry.scannedAt.toLocal())} · ${TimeOfDay.fromDateTime(entry.scannedAt.toLocal()).format(context)}',
+                style: const TextStyle(color: beamMuted, fontSize: 11),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Your analyzed meals will appear here after scan history is enabled.',
-                style: TextStyle(color: beamMuted, height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.camera_alt_rounded),
-                label: const Text('Scan a meal'),
+              Text(
+                'P ${entry.protein.toStringAsFixed(1)}g  ·  C ${entry.carbs.toStringAsFixed(1)}g  ·  F ${entry.fat.toStringAsFixed(1)}g',
+                style: const TextStyle(color: beamMuted, fontSize: 11),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${entry.calories.round()}',
+              style: const TextStyle(
+                color: beamCyan,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Text(
+              'kcal',
+              style: TextStyle(color: beamMuted, fontSize: 10),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => Theme(
@@ -122,11 +289,11 @@ class _FoodScanScreenState extends State<FoodScanScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
               children: [
                 BeamTabHeader(
                   title: 'Scan Food',
-                  padding: const EdgeInsets.fromLTRB(4, 6, 4, 12),
+                  padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
                   trailing: BeamHeaderAction(
                     icon: Icons.history_rounded,
                     tooltip: 'Scan history',
@@ -226,105 +393,98 @@ class _FoodScanScreenState extends State<FoodScanScreen> {
               fit: StackFit.expand,
               children: [
                 if (_imageBytes == null)
-                  Container(
-                    color: const Color(0xFF001A2A),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            color: beamCyan.withValues(alpha: .12),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: beamCyan.withValues(alpha: .65),
+                  Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      SvgPicture.asset(
+                        'assets/icons/connect/food-placeholder.svg',
+                        fit: BoxFit.cover,
+                        excludeFromSemantics: true,
+                      ),
+                      ColoredBox(
+                        color: beamNavy.withValues(alpha: .18),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 58,
+                              height: 58,
+                              decoration: BoxDecoration(
+                                color: beamCyan.withValues(alpha: .12),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: beamCyan.withValues(alpha: .65),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt_rounded,
+                                size: 28,
+                                color: beamCyan,
+                              ),
                             ),
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt_rounded,
-                            size: 28,
-                            color: beamCyan,
-                          ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Aim your camera at the meal',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Good light gives better estimates',
+                              style: TextStyle(color: beamMuted, fontSize: 11),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Aim your camera at the meal',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Good light gives better estimates',
-                          style: TextStyle(color: beamMuted, fontSize: 11),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   )
                 else
                   Image.memory(_imageBytes!, fit: BoxFit.cover),
                 const IgnorePointer(child: _ScanFrameCorners()),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 14,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF032235).withValues(alpha: .9),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: beamCyan),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_isScanning)
-                            const SizedBox(
-                              width: 13,
-                              height: 13,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: beamCyan,
-                              ),
-                            )
-                          else
+                if (!_isScanning)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 14,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF032235).withValues(alpha: .9),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: beamCyan),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             const Icon(
                               Icons.check_circle_rounded,
                               color: beamCyan,
                               size: 15,
                             ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _isScanning
-                                ? 'Analysing photo'
-                                : _imageBytes == null
-                                ? 'Camera ready'
-                                : 'Meal captured',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                            const SizedBox(width: 6),
+                            Text(
+                              _imageBytes == null
+                                  ? 'Camera ready'
+                                  : 'Meal captured',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (_isScanning)
-                  Container(
-                    color: beamNavy.withValues(alpha: .42),
-                    child: const Center(
-                      child: CircularProgressIndicator(color: beamCyan),
-                    ),
-                  ),
+                if (_isScanning) const _ScanLoadingOverlay(),
               ],
             ),
           ),
@@ -601,6 +761,111 @@ class _FoodScanScreenState extends State<FoodScanScreen> {
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _ScanLoadingOverlay extends StatefulWidget {
+  const _ScanLoadingOverlay();
+
+  @override
+  State<_ScanLoadingOverlay> createState() => _ScanLoadingOverlayState();
+}
+
+class _ScanLoadingOverlayState extends State<_ScanLoadingOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController animation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+  late final CurvedAnimation progress = CurvedAnimation(
+    parent: animation,
+    curve: Curves.easeInOutCubic,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      animation.stop();
+    } else if (!animation.isAnimating) {
+      animation.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    progress.dispose();
+    animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: progress,
+    builder: (context, _) => LayoutBuilder(
+      builder: (context, box) {
+        final scanProgress = MediaQuery.disableAnimationsOf(context)
+            ? .25
+            : progress.value;
+        final scanTop = 18 + (box.maxHeight - 36) * scanProgress;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: beamNavy.withValues(alpha: .26)),
+            Positioned(
+              left: 18,
+              right: 18,
+              top: scanTop,
+              child: Container(
+                height: 3,
+                decoration: BoxDecoration(
+                  color: beamCyan,
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: const [
+                    BoxShadow(color: beamCyan, blurRadius: 12, spreadRadius: 2),
+                  ],
+                ),
+              ),
+            ),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF032235).withValues(alpha: .94),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: beamCyan.withValues(alpha: .75)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x5500D7E8),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, color: beamCyan, size: 17),
+                    SizedBox(width: 8),
+                    Text(
+                      'Analyzing your meal',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     ),
   );
 }

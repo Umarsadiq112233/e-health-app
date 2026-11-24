@@ -216,7 +216,11 @@ class AppFlowCubit extends Cubit<AppFlowState> {
     if (profile.id != state.userId) return;
     _emitSetup(
       SetupProgress(
-        wellness: state.setup.wellness,
+        wellness: {
+          ...state.setup.wellness,
+          if (profile.birthDate != null)
+            'birthday': birthDateValue(profile.birthDate),
+        },
         name: profile.name,
         weight: profile.weight,
         avatarPath: profile.avatarPath,

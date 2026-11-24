@@ -61,7 +61,7 @@ void main() {
     final service = FoodAnalysisService(
       client: client,
       endpoint:
-          'https://agigsbwjaupsfvhcnseg.supabase.co/functions/v1/analyze-meal',
+        'https://oamqpmqlydxmxeeipyha.supabase.co/functions/v1/analyze-meal',
       publishableKey: 'test-key',
     );
 
@@ -69,7 +69,7 @@ void main() {
 
     expect(result.mealName, 'Fruit bowl');
     expect(urls, [
-      'https://agigsbwjaupsfvhcnseg.supabase.co/functions/v1/analyze-meal',
+      'https://oamqpmqlydxmxeeipyha.supabase.co/functions/v1/analyze-meal',
       'https://bnineticuomwftfnjhrk.supabase.co/functions/v1/analyze-meal-ingredients-v8',
     ]);
   });

@@ -295,12 +295,12 @@ class Dashboard extends StatelessWidget {
                 },
               ),
             ),
-            _heading('Your insights', null, null),
+            _heading('Your health report', null, null),
             _Surface(
               color: Theme.of(context).brightness == Brightness.dark
                   ? null
                   : AppColors.mint,
-              onTap: () => open('insights'),
+              onTap: () => open('report'),
               child: const Row(
                 children: [
                   CircleAvatar(

@@ -57,6 +57,10 @@ config/supabase.json
 supabase/.temp/
 supabase/.branches/
 **/node_modules/
+/functions/lib/
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
 
 # Maintained as a separate repository
 /clinician-portal/
