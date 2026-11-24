@@ -12,6 +12,7 @@ import '../../domain/models/account_profile.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../device_pairing/presentation/cubit/device_cubit.dart';
 
 class ProfileScreen extends StatelessWidget {
   final ValueChanged<String> open;
@@ -104,35 +105,50 @@ class ProfileScreen extends StatelessWidget {
           _panel(
             InkWell(
               onTap: () => open('ring'),
-              child: const Row(
+              child: Row(
                 children: [
-                  BeamImage(
+                  const BeamImage(
                     asset: BeamAssets.watch,
                     label: 'E Health Pulse Watch',
                     width: 48,
                     height: 65,
                   ),
-                  SizedBox(width: 14),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Devices',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(height: 6),
-                        Text(
-                          'E Health Pulse Watch',
-                          style: TextStyle(color: beamMuted, fontSize: 12),
+                        const SizedBox(height: 6),
+                        BlocBuilder<DeviceCubit, DeviceState>(
+                          bloc: DeviceCubit.instance,
+                          builder: (context, state) {
+                            final connected =
+                                state.phase == DevicePhase.connected ||
+                                state.phase == DevicePhase.syncing ||
+                                state.phase == DevicePhase.syncCompleted;
+                            final hasDevice = connected && state.device != null;
+                            return Text(
+                              hasDevice
+                                  ? state.device!.displayName
+                                  : 'No device connected',
+                              style: const TextStyle(
+                                color: beamMuted,
+                                fontSize: 12,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: beamMuted),
+                  const Icon(Icons.chevron_right, color: beamMuted),
                 ],
               ),
             ),
