@@ -11,6 +11,8 @@ import '../../../onboarding/presentation/cubit/app_flow_cubit.dart';
 import '../../../device_pairing/presentation/cubit/device_cubit.dart';
 import '../../../device_pairing/presentation/pages/discover_devices_screen.dart';
 import '../../../../shared/health_catalog.dart';
+import '../../domain/health_reading.dart';
+import '../cubit/health_cubit.dart';
 import '../widgets/beam_health_charts.dart';
 
 enum BeamHealthKind {
@@ -52,9 +54,9 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
   int? editing;
   bool updated = false, saving = false;
   String? error;
-  DateTime date = DateTime(2026, 10, 12),
-      from = DateTime(2026, 10, 6),
-      to = DateTime(2026, 10, 12);
+  DateTime date = DateTime.now(),
+      from = DateTime.now().subtract(const Duration(days: 6)),
+      to = DateTime.now();
   int chartTab = 0;
   List<double> targets = [10000, 90, 8, 8];
   List<double> savedTargets = [10000, 90, 8, 8];
@@ -174,7 +176,6 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     if (chosen != null && mounted) {
       setState(() {
         date = chosen;
-        empty = kind == BeamHealthKind.history && date.day == 13;
       });
     }
   }
@@ -345,6 +346,105 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     'Nov',
     'Dec',
   ][value.month - 1];
+
+  // ---- Real synced data ---------------------------------------------------
+  // Every value on these pages is derived from HealthCubit readings —
+  // the measurements synced from the watch. Where the health model has
+  // no data for a display (calories, distance, active minutes, sleep
+  // stages, hourly steps), the display shows zero/empty rather than the
+  // sample values this preview originally shipped with.
+  HealthState get _health => HealthCubit.instance.state;
+
+  String _fmt(num value) => value.round().toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+    (match) => '${match[1]},',
+  );
+
+  String _dur(double hours) {
+    final minutes = (hours * 60).round();
+    return '${minutes ~/ 60}h ${minutes % 60}m';
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  List<HealthReading> _readingsOn(HealthMetricType metric, DateTime day) =>
+      _health.readings
+          .where(
+            (reading) =>
+                reading.metric == metric &&
+                _sameDay(reading.timestamp.toLocal(), day),
+          )
+          .toList();
+
+  List<HealthReading> _recent(HealthMetricType metric, [int count = 5]) {
+    final values =
+        _health.readings.where((r) => r.metric == metric).toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return values.take(count).toList();
+  }
+
+  /// The recorded step total for one day (the watch reports one
+  /// cumulative total per day), or 0 when the day has no reading.
+  double _stepsOn(DateTime day) {
+    final values = _readingsOn(HealthMetricType.steps, day);
+    if (values.isEmpty) return 0;
+    return values.map((r) => r.value).reduce((a, b) => a > b ? a : b);
+  }
+
+  /// The recorded sleep duration (hours) for one day, or 0.
+  double _sleepOn(DateTime day) {
+    final values = _readingsOn(HealthMetricType.sleep, day);
+    if (values.isEmpty) return 0;
+    return values.map((r) => r.value).reduce((a, b) => a > b ? a : b);
+  }
+
+  List<DateTime> _days(int count) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return [
+      for (var i = count - 1; i >= 0; i--) today.subtract(Duration(days: i)),
+    ];
+  }
+
+  /// Real daily step totals for the last seven days, oldest first.
+  List<double> get _weekSteps => [for (final day in _days(7)) _stepsOn(day)];
+
+  /// Mean recorded sleep (hours) over the last seven days, or null
+  /// when no night has been synced.
+  double? get _averageSleep => _mean(
+    [for (final day in _days(7)) _sleepOn(day)].where((v) => v > 0).toList(),
+  );
+
+  /// Real step totals for the last four weeks, oldest first.
+  List<double> get _monthSteps => [
+    for (var week = 0; week < 4; week++)
+      _days(28)
+          .skip(week * 7)
+          .take(7)
+          .fold(0.0, (sum, day) => sum + _stepsOn(day)),
+  ];
+
+  List<double> _valuesOn(HealthMetricType metric, DateTime day) =>
+      _readingsOn(metric, day).map((r) => r.value).toList();
+
+  double? _mean(List<double> values) => values.isEmpty
+      ? null
+      : values.reduce((a, b) => a + b) / values.length;
+
+  String _whenText(DateTime time) {
+    final now = DateTime.now();
+    final clock =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    if (_sameDay(time, now)) return 'Today, $clock';
+    if (_sameDay(time, now.subtract(const Duration(days: 1)))) {
+      return 'Yesterday, $clock';
+    }
+    return '${time.day} ${monthName(time)}, $clock';
+  }
+
+  String _weekday(DateTime day) =>
+      const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day.weekday - 1];
   Widget dateStrip() => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
@@ -360,7 +460,6 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                   : 1,
             ),
           );
-          empty = kind == BeamHealthKind.history && date.day == 13;
         }),
         icon: const BeamIcon('back', size: 15),
       ),
@@ -388,7 +487,6 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                   : 1,
             ),
           );
-          empty = kind == BeamHealthKind.history && date.day == 13;
         }),
         icon: const Icon(Icons.chevron_right, size: 18, color: beamMuted),
       ),
@@ -577,7 +675,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     builder: (_) => AlertDialog(
       title: const Text('Design preview'),
       content: const Text(
-        'Charts use sample values. Sync your wearable for recorded data.',
+        'Charts show the data synced from your wearable.',
       ),
       actions: [
         TextButton(
@@ -668,42 +766,20 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       ],
     ),
   );
+  // Calories, distance and active minutes have no metric in the health
+  // model, so they start at zero instead of showing sample values.
   Widget heroStats() => stats([
-    ('flame', '320', 'Calories', healthPink),
-    ('pin', '6.2', 'Distance (km)', beamCyan),
-    ('clock', '78', 'Active minutes', healthPurple),
+    ('flame', '0', 'Calories', healthPink),
+    ('pin', '0', 'Distance (km)', beamCyan),
+    ('clock', '0', 'Active minutes', healthPurple),
   ]);
-  List<double> get hourly => [
-    40,
-    120,
-    210,
-    120,
-    480,
-    320,
-    620,
-    440,
-    750,
-    1400,
-    900,
-    270,
-    1120,
-    640,
-    410,
-    320,
-    800,
-    420,
-    150,
-    80,
-  ];
-  List<double> get weekly => [7600, 7650, 10600, 8000, 7900, 9400, 10800];
+  // The sync stores one step total per day, never an hourly breakdown,
+  // so the hourly chart honestly shows an empty series.
+  List<double> get hourly => List<double>.filled(20, 0);
+  // Real daily step totals for the last seven days.
+  List<double> get weekly => _weekSteps;
   List<String> get weekLabels => [
-    'Mon\n6',
-    'Tue\n7',
-    'Wed\n8',
-    'Thu\n9',
-    'Fri\n10',
-    'Sat\n11',
-    'Sun\n12',
+    for (final day in _days(7)) '${_weekday(day)}\n${day.day}',
   ];
   Widget chartCard(
     String heading, {
@@ -777,20 +853,26 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
   );
   List<Widget> activity() {
     if (period == 'Day' && !detail) {
+      final steps = _stepsOn(date);
+      final remaining = targets[0] - steps;
       return [
         HealthHeroRing(
-          value: '8,560',
+          value: _fmt(steps),
           unit: 'Steps',
           icon: 'shoe',
-          goal: '/ ${targets[0].round()}',
-          progress: .86,
+          goal: '/ ${_fmt(targets[0])}',
+          progress: (steps / targets[0]).clamp(0, 1),
         ),
         gap(),
         heroStats(),
         gap(),
         note(
           'You’re doing great!',
-          '1,440 steps to your goal.',
+          steps <= 0
+              ? 'Sync your watch to see your progress.'
+              : remaining <= 0
+              ? 'You reached your step goal.'
+              : '${_fmt(remaining)} steps to your goal.',
           icon: 'target',
         ),
         gap(),
@@ -801,30 +883,39 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           labels: const ['12 AM', '4 AM', '8 AM', '12 PM', '4 PM', '8 PM'],
         ),
         gap(),
-        note('Most active period', '11 AM – 1 PM', icon: 'shoe'),
+        note('Most active period', 'Not recorded yet', icon: 'shoe'),
       ];
     }
     if (period == 'Day') {
+      final steps = _stepsOn(date);
+      final previous = _stepsOn(date.subtract(const Duration(days: 1)));
+      final change = previous <= 0
+          ? null
+          : (((steps - previous) / previous) * 100).round();
       return [
-        progress('Daily Goal Progress', '8,560 / 10,000 steps', .86),
+        progress(
+          'Daily Goal Progress',
+          '${_fmt(steps)} / ${_fmt(targets[0])} steps',
+          (steps / targets[0]).clamp(0, 1),
+        ),
         gap(),
         stats([
-          ('insights', '8,560', 'Current steps', beamCyan),
-          ('target', '10,000', 'Goal', healthOrange),
+          ('insights', _fmt(steps), 'Current steps', beamCyan),
+          ('target', _fmt(targets[0]), 'Goal', healthOrange),
         ]),
         gap(),
         panel(
           'Previous Day Comparison',
           Column(
             children: [
-              const Text(
-                '● Today 8,560   ● Yesterday 6,210',
-                style: TextStyle(fontSize: 9, color: beamMuted),
+              Text(
+                '● This day ${_fmt(steps)}   ● Previous day ${_fmt(previous)}',
+                style: const TextStyle(fontSize: 9, color: beamMuted),
               ),
               const SizedBox(height: 10),
               HealthGraph(
                 values: hourly,
-                comparison: hourly.map((value) => value * .72).toList(),
+                comparison: List<double>.filled(hourly.length, 0),
                 bars: true,
                 max: 2000,
                 color: beamCyan,
@@ -834,15 +925,20 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ),
         gap(),
         stats([
-          ('shoe', '+38%', 'More steps than yesterday', healthGreen),
-          ('clock', '+22 min', 'More active time', healthPurple),
+          (
+            'shoe',
+            change == null ? '—' : '${change >= 0 ? '+' : ''}$change%',
+            'Steps vs previous day',
+            healthGreen,
+          ),
+          ('clock', '—', 'Active time change', healthPurple),
         ]),
         gap(),
         panel(
           'Activity Summary',
           stats([
-            ('pin', '8,560', 'Today · 6.2 km · 78 min', beamCyan),
-            ('pin', '6,210', 'Yesterday · 4.8 km', beamMuted),
+            ('pin', _fmt(steps), 'This day', beamCyan),
+            ('pin', _fmt(previous), 'Previous day', beamMuted),
           ]),
         ),
       ];
@@ -851,14 +947,19 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       chartCard('Weekly Overview'),
       gap(),
       stats([
-        ('shoe', '56,210', 'Total steps', beamCyan),
-        ('flame', '2,340', 'Calories', healthPink),
-        ('pin', '42.5', 'Distance (km)', beamCyan),
+        (
+          'shoe',
+          _fmt(_weekSteps.reduce((a, b) => a + b)),
+          'Total steps',
+          beamCyan,
+        ),
+        ('flame', '0', 'Calories', healthPink),
+        ('pin', '0', 'Distance (km)', beamCyan),
       ]),
       gap(),
       chartCard(
         'Monthly Overview',
-        values: const [16000, 19000, 24000, 27000, 18000, 26000, 22000, 24000],
+        values: _monthSteps,
         max: 30000,
         labels: const ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
       ),
@@ -869,13 +970,14 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
 
   List<Widget> steps() {
     if (period == 'Day') {
+      final steps = _stepsOn(date);
       return [
         HealthHeroRing(
-          value: '8,560',
+          value: _fmt(steps),
           unit: 'Steps',
           icon: 'shoe',
-          goal: '/ ${targets[0].round()}',
-          progress: .86,
+          goal: '/ ${_fmt(targets[0])}',
+          progress: (steps / targets[0]).clamp(0, 1),
         ),
         gap(),
         heroStats(),
@@ -900,12 +1002,22 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       ];
     }
     final month = period == 'Month';
+    final total = month
+        ? _days(30).fold(0.0, (sum, day) => sum + _stepsOn(day))
+        : _weekSteps.reduce((a, b) => a + b);
+    final previousTotal = month
+        ? _days(60).take(30).fold(0.0, (sum, day) => sum + _stepsOn(day))
+        : _days(14).take(7).fold(0.0, (sum, day) => sum + _stepsOn(day));
+    final change = previousTotal <= 0
+        ? null
+        : (((total - previousTotal) / previousTotal) * 100).round();
+    final bestDay = _days(7).reduce(
+      (a, b) => _stepsOn(a) >= _stepsOn(b) ? a : b,
+    );
     return [
       chartCard(
         month ? 'Monthly Overview' : 'Weekly Progress',
-        values: month
-            ? const [16000, 22000, 23500, 25000, 18000, 26000, 22500, 27000]
-            : weekly,
+        values: month ? _monthSteps : weekly,
         max: month ? 30000 : 15000,
         labels: month
             ? const ['Week 1', 'Week 2', 'Week 3', 'Week 4']
@@ -914,14 +1026,21 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           children: [
             Expanded(
               child: Text(
-                month ? '242,540 steps' : '55,210 steps',
+                '${_fmt(total)} steps',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            HealthBadge(month ? '↑ 18%' : '↑ 12%'),
+            HealthBadge(
+              change == null
+                  ? '—'
+                  : '${change >= 0 ? '↑' : '↓'} ${change.abs()}%',
+              color: change == null || change >= 0
+                  ? healthGreen
+                  : healthPink,
+            ),
           ],
         ),
       ),
@@ -929,13 +1048,18 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       stats(
         month
             ? [
-                ('shoe', '8,085', 'Daily average', beamCyan),
-                ('flame', '9,840', 'Calories', healthPink),
-                ('pin', '189.2', 'Distance (km)', beamCyan),
+                ('shoe', _fmt(total / 30), 'Daily average', beamCyan),
+                ('flame', '0', 'Calories', healthPink),
+                ('pin', '0', 'Distance (km)', beamCyan),
               ]
             : [
-                ('shoe', '7,887', 'Daily average', beamCyan),
-                ('target', '12,480', 'Best day · Sun, 12 Oct', healthOrange),
+                ('shoe', _fmt(total / 7), 'Daily average', beamCyan),
+                (
+                  'target',
+                  _fmt(_stepsOn(bestDay)),
+                  'Best day · ${_weekday(bestDay)}, ${bestDay.day} ${monthName(bestDay)}',
+                  healthOrange,
+                ),
               ],
       ),
       gap(),
@@ -943,16 +1067,20 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         month ? 'Monthly History' : 'Weekly History',
         Column(
           children: [
-            for (var i = 0; i < (month ? 4 : 7); i++)
-              recordRow(
-                month
-                    ? 'Week ${4 - i}'
-                    : '${['Sun', 'Sat', 'Fri', 'Thu', 'Wed', 'Tue', 'Mon'][i]}, ${12 - i} Oct',
-                month
-                    ? '${72340 - i * 6430} steps'
-                    : '${12480 - i * 680} steps',
-                percent: 1 - i * .065,
-              ),
+            if (month)
+              for (var w = 3; w >= 0; w--)
+                recordRow(
+                  'Week ${w + 1}',
+                  '${_fmt(_monthSteps[w])} steps',
+                  percent: (_monthSteps[w] / (targets[0] * 7)).clamp(0, 1),
+                )
+            else
+              for (final day in _days(7).reversed)
+                recordRow(
+                  '${_weekday(day)}, ${day.day} ${monthName(day)}',
+                  '${_fmt(_stepsOn(day))} steps',
+                  percent: (_stepsOn(day) / targets[0]).clamp(0, 1),
+                ),
           ],
         ),
         icon: 'calendar',
@@ -1011,6 +1139,11 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
   );
   List<Widget> heart() {
     if (period == 'Live') {
+      final latest = _recent(HealthMetricType.heartRate, 1).firstOrNull;
+      final todayValues = _valuesOn(HealthMetricType.heartRate, DateTime.now());
+      final todayMean = _mean(todayValues);
+      String bpm(double? value) =>
+          value == null ? '-- BPM' : '${value.round()} BPM';
       return [
         LayoutBuilder(
           builder: (context, box) => SizedBox(
@@ -1020,29 +1153,56 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
               maxWidth: box.maxWidth + 28,
               child: SizedBox(
                 width: box.maxWidth + 28,
-                child: const HealthHeroRing(
-                  value: '72',
+                child: HealthHeroRing(
+                  value: latest == null ? '--' : '${latest.value.round()}',
                   unit: 'BPM',
                   icon: 'heart',
                   color: healthPink,
                   progress: 1,
                   open: true,
+                  badge: latest == null
+                      ? null
+                      : latest.value < 60
+                      ? 'Low'
+                      : latest.value > 100
+                      ? 'Elevated'
+                      : 'Normal',
                 ),
               ),
             ),
           ),
         ),
-        const Center(
+        Center(
           child: Text(
-            'Last reading · Today, 09:28',
-            style: TextStyle(fontSize: 10, color: beamMuted),
+            latest == null
+                ? 'No readings yet'
+                : 'Last reading · ${_whenText(latest.timestamp.toLocal())}',
+            style: const TextStyle(fontSize: 10, color: beamMuted),
           ),
         ),
         gap(),
         heartStats([
-          ('heart', '68 BPM', 'Resting HR', healthPink),
-          ('activity', '102 BPM', 'Average today', beamCyan),
-          ('ecg', '136 BPM', 'Peak today', healthPink),
+          (
+            'heart',
+            bpm(
+              todayValues.isEmpty
+                  ? null
+                  : todayValues.reduce((a, b) => a < b ? a : b),
+            ),
+            'Resting HR',
+            healthPink,
+          ),
+          ('activity', bpm(todayMean), 'Average today', beamCyan),
+          (
+            'ecg',
+            bpm(
+              todayValues.isEmpty
+                  ? null
+                  : todayValues.reduce((a, b) => a > b ? a : b),
+            ),
+            'Peak today',
+            healthPink,
+          ),
         ]),
         gap(),
         note(
@@ -1058,45 +1218,43 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         gap(),
         note(
           'Wellness readings',
-          'Preview readings. Wellness use only.',
+          'Synced readings. Wellness use only.',
           icon: 'document',
         ),
       ];
     }
     if (period == 'Day') {
+      final values = _valuesOn(HealthMetricType.heartRate, date);
+      final mean = _mean(values);
+      String bpm(double? value) =>
+          value == null ? '-- BPM' : '${value.round()} BPM';
+      final min = values.isEmpty
+          ? null
+          : values.reduce((a, b) => a < b ? a : b);
+      final max = values.isEmpty
+          ? null
+          : values.reduce((a, b) => a > b ? a : b);
+      // Share of the day's real samples in each band: Resting <60,
+      // Normal 60–99, Elevated 100–119, High ≥120 BPM.
+      String zone(double Function(double) test) {
+        if (values.isEmpty) return '—';
+        final count = values.where(test).length;
+        return '${(count / values.length * 100).round()}%';
+      }
+
       return [
         chartCard(
           'Heart Rate Trend',
-          values: const [
-            60,
-            65,
-            62,
-            80,
-            71,
-            66,
-            72,
-            69,
-            78,
-            90,
-            105,
-            102,
-            110,
-            95,
-            92,
-            107,
-            83,
-            76,
-            88,
-          ],
+          values: values.isEmpty ? const [0, 0, 0, 0, 0, 0] : values,
           bars: false,
           max: 180,
           labels: const ['12 AM', '4 AM', '8 AM', '12 PM', '4 PM', '8 PM'],
           tint: healthPink,
           unit: 'BPM',
           top: heartStats([
-            ('heart', '52 BPM', 'Min', healthPink),
-            ('heart', '78 BPM', 'Average', healthPink),
-            ('heart', '136 BPM', 'Max', healthPink),
+            ('heart', bpm(min), 'Min', healthPink),
+            ('heart', bpm(mean), 'Average', healthPink),
+            ('heart', bpm(max), 'Max', healthPink),
           ], inline: true),
         ),
         gap(),
@@ -1110,11 +1268,14 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final item in const [
-                      ('Resting  6%', beamCyan),
-                      ('Normal  78%', healthGreen),
-                      ('Elevated  14%', healthOrange),
-                      ('High  2%', healthPink),
+                    for (final item in [
+                      ('Resting  ${zone((v) => v < 60)}', beamCyan),
+                      ('Normal  ${zone((v) => v >= 60 && v < 100)}', healthGreen),
+                      (
+                        'Elevated  ${zone((v) => v >= 100 && v < 120)}',
+                        healthOrange,
+                      ),
+                      ('High  ${zone((v) => v >= 120)}', healthPink),
                     ])
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 5),
@@ -1130,38 +1291,67 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ),
         gap(),
         heartStats([
-          ('heart', '68 BPM', 'Resting heart rate', healthPink),
-          ('insights', '78 BPM', 'Average heart rate', healthPink),
+          ('heart', bpm(min), 'Resting heart rate', healthPink),
+          ('insights', bpm(mean), 'Average heart rate', healthPink),
         ]),
       ];
     }
+    final dailyMeans = [
+      for (final day in _days(7))
+        _mean(_valuesOn(HealthMetricType.heartRate, day)) ?? 0,
+    ];
+    final allValues = [
+      for (final day in _days(7))
+        ..._valuesOn(HealthMetricType.heartRate, day),
+    ];
+    final mean = _mean(allValues);
+    String bpm(double? value) =>
+        value == null ? '-- BPM' : '${value.round()} BPM';
+    final recent = _recent(HealthMetricType.heartRate);
     return [
       chartCard(
         period == 'Month' ? 'Monthly Trend' : 'Weekly Trend',
-        values: const [76, 84, 110, 82, 86, 88, 102],
+        values: dailyMeans,
         max: 180,
         tint: healthPink,
         unit: 'BPM',
       ),
       gap(),
       heartStats([
-        ('heart', '62 BPM', 'Lowest', healthPink),
-        ('activity', '82 BPM', 'Average', beamCyan),
-        ('insights', '136 BPM', 'Highest', healthPink),
+        (
+          'heart',
+          bpm(
+            allValues.isEmpty
+                ? null
+                : allValues.reduce((a, b) => a < b ? a : b),
+          ),
+          'Lowest',
+          healthPink,
+        ),
+        ('activity', bpm(mean), 'Average', beamCyan),
+        (
+          'insights',
+          bpm(
+            allValues.isEmpty
+                ? null
+                : allValues.reduce((a, b) => a > b ? a : b),
+          ),
+          'Highest',
+          healthPink,
+        ),
       ]),
       gap(),
       panel(
         'Measurement History',
         Column(
           children: [
-            for (var i = 0; i < 5; i++)
+            if (recent.isEmpty) recordRow('No readings yet', '—'),
+            for (final reading in recent)
               recordRow(
-                i < 3
-                    ? 'Today, ${['09:28', '08:15', '06:42'][i]}'
-                    : 'Yesterday, ${i == 3 ? '09:10' : '06:30'}',
-                '${[72, 68, 62, 98, 76][i]} BPM',
-                badge: i == 3 ? 'Elevated' : 'Normal',
-                tint: i == 3 ? healthOrange : healthGreen,
+                _whenText(reading.timestamp.toLocal()),
+                '${reading.value.round()} BPM',
+                badge: reading.value >= 100 ? 'Elevated' : 'Normal',
+                tint: reading.value >= 100 ? healthOrange : healthGreen,
               ),
           ],
         ),
@@ -1307,39 +1497,74 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
   );
   List<Widget> sleep() {
     if (period == 'Day' && !detail) {
+      final hours = _sleepOn(date);
+      final readings = _readingsOn(HealthMetricType.sleep, date);
+      final wake = readings.isEmpty
+          ? null
+          : readings
+                .reduce((a, b) => a.value >= b.value ? a : b)
+                .timestamp
+                .toLocal();
       return [
         HealthHeroRing(
-          value: '7h 24m',
+          value: hours <= 0 ? '--' : _dur(hours),
           unit: 'Total sleep',
           icon: 'moon',
           color: healthPurple,
           goal: '/ ${targets[2]}h goal',
-          progress: .93,
+          progress: (hours / targets[2]).clamp(0, 1),
         ),
         gap(),
         stats([
-          ('bed', '11:12 PM', 'Sleep start', healthPurple),
-          ('sun', '6:36 AM', 'Wake up', healthOrange),
+          // Sleep start is not stored by the sync; the reading's
+          // timestamp is the wake time, which is shown for real.
+          ('bed', '—', 'Sleep start', healthPurple),
+          (
+            'sun',
+            wake == null
+                ? '—'
+                : TimeOfDay.fromDateTime(wake).format(context),
+            'Wake up',
+            healthOrange,
+          ),
         ]),
         gap(),
         progress(
           'Sleep Goal',
-          '7h 24m / ${targets[2]}h',
-          .93,
+          hours <= 0 ? '-- / ${targets[2]}h' : '${_dur(hours)} / ${targets[2]}h',
+          (hours / targets[2]).clamp(0, 1),
           tint: healthPurple,
           onTap: () => push(BeamHealthKind.editGoals, goal: 2),
         ),
         gap(),
+        // Sleep stages (deep/light/REM) are not kept by the health
+        // model — only the night's total — so they show as unavailable
+        // instead of invented durations.
         stats([
-          ('moon', '2h 10m', 'Deep · 28%', healthPurple),
-          ('moon', '4h 28m', 'Light · 60%', healthPurple),
-          ('eye', '46m', 'REM · 12%', healthPink),
+          ('moon', '—', 'Deep', healthPurple),
+          ('moon', '—', 'Light', healthPurple),
+          ('eye', '—', 'REM', healthPink),
         ]),
         gap(),
-        coach('Good sleep!', 'You met 93% of your sleep goal.'),
+        coach(
+          hours <= 0 ? 'No sleep data yet' : 'Good sleep!',
+          hours <= 0
+              ? 'Sync your watch to see your sleep.'
+              : 'You met ${((hours / targets[2]) * 100).round()}% of your sleep goal.',
+        ),
       ];
     }
     if (period == 'Day') {
+      final readings = _readingsOn(HealthMetricType.sleep, date);
+      final wake = readings.isEmpty
+          ? null
+          : readings
+                .reduce((a, b) => a.value >= b.value ? a : b)
+                .timestamp
+                .toLocal();
+      final wakeText = wake == null
+          ? '—'
+          : TimeOfDay.fromDateTime(wake).format(context);
       return [
         panel(
           'Sleep Stages',
@@ -1351,35 +1576,10 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
               ),
               const SizedBox(height: 12),
               HealthGraph(
-                values: const [
-                  10,
-                  4,
-                  4,
-                  3,
-                  7,
-                  7,
-                  5,
-                  4,
-                  5,
-                  4,
-                  4,
-                  4,
-                  8,
-                  5,
-                  4,
-                  4,
-                  7,
-                  3,
-                  5,
-                  10,
-                  8,
-                  4,
-                  3,
-                  3,
-                  3,
-                  5,
-                  10,
-                ],
+                // Stage-by-stage series are not kept by the health
+                // model, so the stage chart shows an empty series
+                // instead of an invented night.
+                values: List<double>.filled(27, 0),
                 color: healthPurple,
                 stages: true,
                 max: 12,
@@ -1392,22 +1592,24 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ),
         gap(),
         stats([
-          ('eye', '18m', 'Awake · 4%', healthPink),
-          ('moon', '46m', 'REM · 12%', healthPurple),
-          ('moon', '4h 28m', 'Light · 60%', healthPurple),
-          ('bed', '2h 10m', 'Deep · 28%', const Color(0xFF5366FF)),
+          ('eye', '—', 'Awake', healthPink),
+          ('moon', '—', 'REM', healthPurple),
+          ('moon', '—', 'Light', healthPurple),
+          ('bed', '—', 'Deep', const Color(0xFF5366FF)),
         ]),
         gap(),
         panel(
           'Sleep Timeline',
           Column(
             children: [
-              for (final row in const [
-                ('11:12 PM', 'Fell asleep'),
-                ('11:30 PM', 'In deep sleep'),
-                ('2:14 AM', 'In light sleep'),
-                ('4:20 AM', 'In REM sleep'),
-                ('6:36 AM', 'Woke up'),
+              // Only the wake time is recorded; the night's other
+              // moments are not stored, so they are not invented.
+              for (final row in [
+                ('—', 'Fell asleep'),
+                ('—', 'In deep sleep'),
+                ('—', 'In light sleep'),
+                ('—', 'In REM sleep'),
+                (wakeText, 'Woke up'),
               ])
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 7),
@@ -1436,24 +1638,27 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ),
         gap(),
         stats([
-          ('moon', '18 min', 'Sleep latency', healthPurple),
-          ('clock', '7h 42m', 'Time in bed', healthPurple),
-          ('eye', '18 min', 'Awake time', healthPink),
+          ('moon', '—', 'Sleep latency', healthPurple),
+          ('clock', '—', 'Time in bed', healthPurple),
+          ('eye', '—', 'Awake time', healthPink),
         ]),
       ];
     }
+    final nights = [for (final day in _days(7)) _sleepOn(day)];
+    final recorded = nights.where((value) => value > 0).toList();
+    final average = _mean(recorded);
     return [
       chartCard(
         period == 'Week' ? 'Sleep Duration' : 'Monthly Sleep',
-        values: const [7.2, 6.8, 8.1, 7.0, 7.2, 7.0, 7.4],
+        values: nights,
         max: 12,
         tint: healthPurple,
         unit: 'hours',
-        top: const Align(
+        top: Align(
           alignment: Alignment.centerRight,
           child: Text(
-            'Average: 7h 12m',
-            style: TextStyle(fontSize: 10, color: healthPurple),
+            average == null ? 'Average: —' : 'Average: ${_dur(average)}',
+            style: const TextStyle(fontSize: 10, color: healthPurple),
           ),
         ),
       ),
@@ -1468,15 +1673,17 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
               Column(
                 children: [
                   Icon(
-                    i == 1 || i == 5
-                        ? Icons.circle_outlined
-                        : Icons.check_circle,
-                    color: i == 1 || i == 5 ? beamMuted : healthPurple,
+                    nights[i] >= targets[2] && nights[i] > 0
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                    color: nights[i] >= targets[2] && nights[i] > 0
+                        ? healthPurple
+                        : beamMuted,
                     size: 24,
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
+                    _weekday(_days(7)[i]),
                     style: const TextStyle(fontSize: 9, color: beamMuted),
                   ),
                 ],
@@ -1488,35 +1695,59 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       ),
       gap(),
       stats([
-        ('bed', '7h 12m', 'Average sleep', healthPurple),
-        ('moon', '11:18 PM', 'Average bedtime', healthPurple),
-        ('sun', '6:42 AM', 'Average wake up', healthOrange),
+        (
+          'bed',
+          average == null ? '—' : _dur(average),
+          'Average sleep',
+          healthPurple,
+        ),
+        ('moon', '—', 'Average bedtime', healthPurple),
+        ('sun', '—', 'Average wake up', healthOrange),
       ]),
       gap(),
-      coach('Your sleep is consistent!', 'Try sleeping 15 minutes earlier.'),
+      coach(
+        average == null ? 'No sleep data yet' : 'Your sleep is consistent!',
+        'Try sleeping 15 minutes earlier.',
+      ),
     ];
   }
 
   List<Widget> oxygen() {
     if (period == 'Live') {
+      final latest = _recent(HealthMetricType.oxygen, 1).firstOrNull;
+      final heartRate = _health.latest(HealthMetricType.heartRate);
       return [
-        const HealthHeroRing(
-          value: '98%',
+        HealthHeroRing(
+          value: latest == null ? '--%' : '${latest.value.round()}%',
           unit: 'SpO2',
           icon: 'oxygen',
-          progress: .90,
+          progress: latest == null
+              ? 0
+              : (latest.value / 100).clamp(0, 1),
           open: true,
+          badge: latest == null
+              ? null
+              : latest.value >= 95
+              ? 'Normal'
+              : 'Low',
         ),
-        const Center(
+        Center(
           child: Text(
-            'Last reading · Today, 09:28',
-            style: TextStyle(fontSize: 10, color: beamMuted),
+            latest == null
+                ? 'No readings yet'
+                : 'Last reading · ${_whenText(latest.timestamp.toLocal())}',
+            style: const TextStyle(fontSize: 10, color: beamMuted),
           ),
         ),
         gap(),
         stats([
-          ('heart', '72 BPM', 'Heart rate', healthPink),
-          ('lungs', '16 /min', 'Respiration', healthPink),
+          (
+            'heart',
+            heartRate == null ? '-- BPM' : '${heartRate.value.round()} BPM',
+            'Heart rate',
+            healthPink,
+          ),
+          ('lungs', '—', 'Respiration', healthPink),
         ]),
         gap(),
         note('Normal range', 'Typical range: 95–100%.', icon: 'oxygen'),
@@ -1527,33 +1758,41 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       ];
     }
     if (period == 'Day') {
+      final values = _valuesOn(HealthMetricType.oxygen, date);
+      final mean = _mean(values);
+      String pct(double? value) =>
+          value == null ? '—%' : '${value.round()}%';
+      final recent = _recent(HealthMetricType.oxygen);
       return [
         chartCard(
           'SpO2 Trend',
-          values: const [
-            96,
-            97,
-            97,
-            98,
-            97,
-            96,
-            97,
-            98,
-            97,
-            98,
-            97,
-            96,
-            97,
-            98,
-          ],
+          values: values.isEmpty ? const [0, 0, 0, 0, 0, 0] : values,
           bars: false,
           max: 100,
           unit: '%',
           labels: const ['12 AM', '4 AM', '8 AM', '12 PM', '4 PM', '8 PM'],
           top: stats([
-            ('oxygen', '97%', 'Average', beamCyan),
-            ('oxygen', '95%', 'Lowest', beamCyan),
-            ('oxygen', '99%', 'Highest', beamCyan),
+            ('oxygen', pct(mean), 'Average', beamCyan),
+            (
+              'oxygen',
+              pct(
+                values.isEmpty
+                    ? null
+                    : values.reduce((a, b) => a < b ? a : b),
+              ),
+              'Lowest',
+              beamCyan,
+            ),
+            (
+              'oxygen',
+              pct(
+                values.isEmpty
+                    ? null
+                    : values.reduce((a, b) => a > b ? a : b),
+              ),
+              'Highest',
+              beamCyan,
+            ),
           ]),
         ),
         gap(),
@@ -1561,14 +1800,13 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           'Recent Readings',
           Column(
             children: [
-              for (var i = 0; i < 5; i++)
+              if (recent.isEmpty) recordRow('No readings yet', '—'),
+              for (final reading in recent)
                 recordRow(
-                  i < 2
-                      ? 'Today, ${i == 0 ? '09:28' : '06:15'}'
-                      : 'Yesterday, ${['', '', '10:42', '07:30', '03:12'][i]}',
-                  '${[98, 97, 96, 95, 98][i]}%',
-                  badge: 'Normal',
-                  tint: healthGreen,
+                  _whenText(reading.timestamp.toLocal()),
+                  '${reading.value.round()}%',
+                  badge: reading.value >= 95 ? 'Normal' : 'Low',
+                  tint: reading.value >= 95 ? healthGreen : healthOrange,
                 ),
             ],
           ),
@@ -1582,18 +1820,44 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ),
       ];
     }
+    final dailyMeans = [
+      for (final day in _days(7))
+        _mean(_valuesOn(HealthMetricType.oxygen, day)) ?? 0,
+    ];
+    final allValues = [
+      for (final day in _days(7)) ..._valuesOn(HealthMetricType.oxygen, day),
+    ];
+    String pct(double? value) => value == null ? '—%' : '${value.round()}%';
     return [
       chartCard(
         'Weekly Overview',
-        values: const [97, 97, 99, 98, 97, 98, 98],
+        values: dailyMeans,
         max: 100,
         unit: '%',
       ),
       gap(),
       stats([
-        ('oxygen', '97%', 'Weekly average', beamCyan),
-        ('oxygen', '95%', 'Lowest reading', beamCyan),
-        ('oxygen', '99%', 'Highest reading', beamCyan),
+        ('oxygen', pct(_mean(allValues)), 'Weekly average', beamCyan),
+        (
+          'oxygen',
+          pct(
+            allValues.isEmpty
+                ? null
+                : allValues.reduce((a, b) => a < b ? a : b),
+          ),
+          'Lowest reading',
+          beamCyan,
+        ),
+        (
+          'oxygen',
+          pct(
+            allValues.isEmpty
+                ? null
+                : allValues.reduce((a, b) => a > b ? a : b),
+          ),
+          'Highest reading',
+          beamCyan,
+        ),
       ]),
       gap(),
       note(
@@ -1647,83 +1911,116 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
       ],
     ),
   );
-  Widget overview({bool month = false}) => HealthGrid(
-    columns: 2,
-    children: [
-      HealthStat(
-        'shoe',
-        month ? '8,120' : '56,210',
-        'Steps',
-        color: healthGreen,
-      ),
-      HealthStat(
-        'heart',
-        month ? '74' : '75 BPM',
-        'Heart rate',
-        color: healthPink,
-      ),
-      HealthStat(
-        'moon',
-        month ? '7h 08m' : '7h 12m',
-        'Sleep',
-        color: healthPurple,
-      ),
-      HealthStat(
-        'flame',
-        month ? '81 min' : '82 min',
-        'Active time',
-        color: healthOrange,
-      ),
-    ],
-  );
-  Widget goalRings() => HealthGrid(
-    columns: 4,
-    children: [
-      for (var i = 0; i < 4; i++)
-        Column(
-          children: [
-            SizedBox(
-              width: 56,
-              height: 56,
-              child: CustomPaint(
-                painter: HealthRingPainter(
-                  [.86, .71, .93, .57][i],
-                  [healthGreen, healthOrange, healthPurple, beamCyan][i],
-                  open: false,
-                ),
-                child: Center(
-                  child: Text(
-                    '${[86, 71, 93, 57][i]}%',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+  Widget overview({bool month = false}) {
+    final days = _days(month ? 30 : 7);
+    final steps = days.fold(0.0, (sum, day) => sum + _stepsOn(day));
+    final heartMean = _mean([
+      for (final day in days) ..._valuesOn(HealthMetricType.heartRate, day),
+    ]);
+    final sleepMean = _mean(
+      [for (final day in days) _sleepOn(day)].where((v) => v > 0).toList(),
+    );
+    return HealthGrid(
+      columns: 2,
+      children: [
+        HealthStat('shoe', _fmt(steps), 'Steps', color: healthGreen),
+        HealthStat(
+          'heart',
+          heartMean == null ? '--' : '${heartMean.round()} BPM',
+          'Heart rate',
+          color: healthPink,
+        ),
+        HealthStat(
+          'moon',
+          sleepMean == null ? '--' : _dur(sleepMean),
+          'Sleep',
+          color: healthPurple,
+        ),
+        const HealthStat(
+          'flame',
+          '0 min',
+          'Active time',
+          color: healthOrange,
+        ),
+      ],
+    );
+  }
+  Widget goalRings() {
+    // Ring progress from today's real readings: steps and sleep have
+    // data sources; active minutes and hydration do not, so they stay
+    // at zero.
+    final progress = <double>[
+      (_stepsOn(DateTime.now()) / targets[0]).clamp(0, 1),
+      0,
+      (_sleepOn(DateTime.now()) / targets[2]).clamp(0, 1),
+      0,
+    ];
+    return HealthGrid(
+      columns: 4,
+      children: [
+        for (var i = 0; i < 4; i++)
+          Column(
+            children: [
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: CustomPaint(
+                  painter: HealthRingPainter(
+                    progress[i],
+                    [healthGreen, healthOrange, healthPurple, beamCyan][i],
+                    open: false,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${(progress[i] * 100).round()}%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              ['Steps', 'Active', 'Sleep', 'Water'][i],
-              style: const TextStyle(fontSize: 10, color: beamMuted),
-            ),
-          ],
-        ),
-    ],
-  );
+              const SizedBox(height: 7),
+              Text(
+                ['Steps', 'Active', 'Sleep', 'Water'][i],
+                style: const TextStyle(fontSize: 10, color: beamMuted),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
   List<Widget> insights() {
     if (period == 'Day') {
       return [
-        mountainGreeting('Good morning, Umar!', 'Your wellness today.'),
+        mountainGreeting(
+          AppSessionCubit.instance.name.trim().isEmpty
+              ? 'Good morning!'
+              : 'Good morning, ${AppSessionCubit.instance.name.trim().split(' ').first}!',
+          'Your wellness today.',
+        ),
         gap(),
         HealthGrid(
           columns: 2,
           children: [
-            for (final item in const [
-              ('shoe', '8,560', 'Steps', healthGreen),
-              ('heart', '72 BPM', 'Heart rate', healthPink),
-              ('moon', '7h 24m', 'Sleep', healthPurple),
-              ('flame', '78 min', 'Active time', healthOrange),
+            for (final item in [
+              ('shoe', _fmt(_stepsOn(date)), 'Steps', healthGreen),
+              (
+                'heart',
+                _health.latest(HealthMetricType.heartRate) == null
+                    ? '-- BPM'
+                    : '${_health.latest(HealthMetricType.heartRate)!.value.round()} BPM',
+                'Heart rate',
+                healthPink,
+              ),
+              (
+                'moon',
+                _sleepOn(date) <= 0 ? '--' : _dur(_sleepOn(date)),
+                'Sleep',
+                healthPurple,
+              ),
+              ('flame', '0 min', 'Active time', healthOrange),
             ])
               InkWell(
                 onTap: () => push(switch (item.$1) {
@@ -1738,10 +2035,14 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                   item.$3,
                   color: item.$4,
                   progress: switch (item.$1) {
-                    'shoe' => .86,
-                    'heart' => .80,
-                    'moon' => .93,
-                    _ => .87,
+                    'shoe' => (_stepsOn(date) / targets[0]).clamp(0, 1),
+                    'heart' =>
+                      ((_health.latest(HealthMetricType.heartRate)?.value ??
+                                  0) /
+                              100)
+                          .clamp(0, 1),
+                    'moon' => (_sleepOn(date) / targets[2]).clamp(0, 1),
+                    _ => 0.0,
                   },
                 ),
               ),
@@ -1757,7 +2058,9 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         gap(),
         coach(
           'You’re doing great today!',
-          'Activity and sleep are well balanced.',
+          _stepsOn(date) <= 0 && _sleepOn(date) <= 0
+              ? 'Sync your watch to build your insights.'
+              : 'Activity and sleep are well balanced.',
         ),
       ];
     }
@@ -1798,10 +2101,14 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                 values: chartTab == 0
                     ? weekly
                     : chartTab == 1
-                    ? const [72, 78, 74, 82, 70, 76, 75]
+                    ? [
+                        for (final day in _days(7))
+                          _mean(_valuesOn(HealthMetricType.heartRate, day)) ??
+                              0,
+                      ]
                     : chartTab == 2
-                    ? const [7, 6.8, 8, 7.1, 7.4, 7, 7.2]
-                    : const [60, 75, 80, 90, 70, 85, 78],
+                    ? [for (final day in _days(7)) _sleepOn(day)]
+                    : List<double>.filled(7, 0),
                 color: [
                   healthGreen,
                   healthPink,
@@ -1824,21 +2131,24 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ),
       ];
     }
+    final thisWeek = _weekSteps.reduce((a, b) => a + b);
+    final lastWeek = _days(14)
+        .take(7)
+        .fold(0.0, (sum, day) => sum + _stepsOn(day));
+    final stepChange = lastWeek <= 0
+        ? null
+        : (((thisWeek - lastWeek) / lastWeek) * 100).round();
+    final sleepAverage = _mean(
+      [for (final day in _days(7)) _sleepOn(day)].where((v) => v > 0).toList(),
+    );
     return [
       panel(
         'Monthly Trends',
-        const HealthGraph(
-          values: [3000, 6000, 5000, 6000],
-          max: 15000,
+        HealthGraph(
+          values: _monthSteps,
+          max: 105000,
           color: healthGreen,
-          labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-          series: [
-            [11000, 13000, 11500, 12000],
-            [7500, 9000, 7500, 8800],
-            [4500, 5600, 4500, 5400],
-            [1800, 2600, 1900, 2700],
-          ],
-          colors: [healthGreen, healthOrange, healthPurple, healthPink],
+          labels: const ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
         ),
       ),
       gap(),
@@ -1850,21 +2160,25 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           children: [
             note(
               'Steps',
-              'Your step count increased 14%.',
+              stepChange == null
+                  ? 'Sync your watch to build step insights.'
+                  : 'Your step count ${stepChange >= 0 ? 'increased' : 'decreased'} ${stepChange.abs()}% this week.',
               icon: 'shoe',
               tint: healthGreen,
             ),
             gap(),
             note(
               'Sleep',
-              'Your sleep duration is consistent.',
+              sleepAverage == null
+                  ? 'No sleep data yet.'
+                  : 'Your average sleep is ${_dur(sleepAverage)}.',
               icon: 'moon',
               tint: healthPurple,
             ),
             gap(),
             note(
               'Activity',
-              'You’re most active in the evenings.',
+              'Active minutes are not recorded yet.',
               icon: 'flame',
               tint: healthOrange,
             ),
@@ -1921,7 +2235,6 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                 : InkWell(
                     onTap: () => setState(() {
                       date = DateTime(date.year, date.month, day);
-                      empty = day == 13 || day == 20 || day > 22;
                     }),
                     borderRadius: BorderRadius.circular(24),
                     child: Container(
@@ -1956,9 +2269,17 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                                   ),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: day == 13 || day > 22
-                                        ? beamBorder
-                                        : tint,
+                                    color:
+                                        _stepsOn(
+                                              DateTime(
+                                                date.year,
+                                                date.month,
+                                                day,
+                                              ),
+                                            ) >
+                                            0
+                                        ? tint
+                                        : beamBorder,
                                   ),
                                 ),
                             ],
@@ -1973,7 +2294,12 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     ),
   );
   List<Widget> history() {
-    if (empty) {
+    // For the Day view, "empty" is decided by the real readings for the
+    // selected date, not by a preset calendar rule.
+    final dayHasData = _health.readings.any(
+      (reading) => _sameDay(reading.timestamp.toLocal(), date),
+    );
+    if (period == 'Day' ? !dayHasData : empty) {
       return [
         HealthPanel(
           child: Column(
@@ -2010,12 +2336,16 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
           'Sync History',
           Column(
             children: [
-              for (var i = 0; i < 4; i++)
-                recordRow(
-                  'Today, ${['09:28', '06:45', '01:12', '07:30'][i]}',
-                  i == 3 ? 'Partial sync' : 'Sample sync',
-                  tint: i == 3 ? healthOrange : healthGreen,
-                ),
+              recordRow(
+                'Last sync',
+                DeviceCubit.instance.state.device?.lastSynced == null
+                    ? 'Not synced yet'
+                    : _whenText(
+                        DeviceCubit.instance.state.device!.lastSynced!
+                            .toLocal(),
+                      ),
+                tint: healthGreen,
+              ),
             ],
           ),
           icon: 'cloud',
@@ -2033,14 +2363,36 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         calendar(),
         gap(),
         panel(
-          '${date.day} Oct 2026',
+          '${date.day} ${monthName(date)} ${date.year}',
           HealthGrid(
             columns: 2,
-            children: const [
-              HealthStat('footprints', '8,560', 'Steps', color: healthGreen),
-              HealthStat('heart', '72 BPM', 'Heart rate', color: healthPink),
-              HealthStat('moon', '7h 24m', 'Sleep', color: healthPurple),
-              HealthStat('flame', '78 min', 'Active time', color: healthOrange),
+            children: [
+              HealthStat(
+                'footprints',
+                _fmt(_stepsOn(date)),
+                'Steps',
+                color: healthGreen,
+              ),
+              HealthStat(
+                'heart',
+                _mean(_valuesOn(HealthMetricType.heartRate, date)) == null
+                    ? '--'
+                    : '${_mean(_valuesOn(HealthMetricType.heartRate, date))!.round()} BPM',
+                'Heart rate',
+                color: healthPink,
+              ),
+              HealthStat(
+                'moon',
+                _sleepOn(date) <= 0 ? '--' : _dur(_sleepOn(date)),
+                'Sleep',
+                color: healthPurple,
+              ),
+              const HealthStat(
+                'flame',
+                '0 min',
+                'Active time',
+                color: healthOrange,
+              ),
             ],
           ),
         ),
@@ -2051,7 +2403,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     return [
       if (period == 'Range') ...[
         BeamButton(
-          '${from.day} Oct – ${to.day} Oct 2026',
+          '${from.day} ${monthName(from)} – ${to.day} ${monthName(to)} ${to.year}',
           secondary: true,
           onPressed: () => pickDate(range: true),
         ),
@@ -2065,10 +2417,10 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         'Daily Records',
         Column(
           children: [
-            for (var i = 0; i < 5; i++)
+            for (final day in _days(5).reversed)
               recordRow(
-                '${12 - i} Oct 2026',
-                '${[8560, 7650, 10420, 9800, 12100][i]} steps',
+                '${day.day} ${monthName(day)} ${day.year}',
+                '${_fmt(_stepsOn(day))} steps',
               ),
           ],
         ),
@@ -2107,7 +2459,26 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     int i, {
     bool clinician = false,
     bool editable = false,
-  }) => InkWell(
+  }) {
+    // Current values and progress come from today's real readings.
+    // Activity minutes and hydration have no data source, so they
+    // stay at zero.
+    final stepsToday = _stepsOn(DateTime.now());
+    final sleepToday = _sleepOn(DateTime.now());
+    final currentValues = <String>[
+      _fmt(stepsToday),
+      '0 min',
+      sleepToday <= 0 ? '--' : _dur(sleepToday),
+      '0 cups',
+    ];
+    final rawValues = <double>[stepsToday, 0, sleepToday, 0];
+    final progress = (rawValues[i] / targets[i]).clamp(0, 1);
+    const clinicianTargets = <double>[8000, 60, 7, 8];
+    final clinicianProgress = (rawValues[i] / clinicianTargets[i]).clamp(
+      0,
+      1,
+    );
+    return InkWell(
     onTap: clinician
         ? showInfo
         : () => editable
@@ -2135,7 +2506,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                 Text(
                   clinician
                       ? ['8,000 steps', '60 minutes', '7 hours', '8 cups'][i]
-                      : '${['8,560', '78 min', '7h 24m', '6 cups'][i]} / ${targetValue(i)}',
+                      : '${currentValues[i]} / ${targetValue(i)}',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -2146,7 +2517,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
-                      value: [.86, .87, .93, .75][i],
+                      value: progress,
                       color: goalColors[i],
                       backgroundColor: beamBorder,
                       minHeight: 7,
@@ -2169,12 +2540,12 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
               height: 65,
               child: CustomPaint(
                 painter: HealthRingPainter(
-                  [.86, .75, .93, .75][i],
+                  clinicianProgress,
                   goalColors[i],
                 ),
                 child: Center(
                   child: Text(
-                    '${[86, 75, 93, 75][i]}%',
+                    '${(clinicianProgress * 100).round()}%',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -2185,7 +2556,7 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
             )
           else
             Text(
-              '${[86, 87, 93, 75][i]}%',
+              '${(progress * 100).round()}%',
               style: TextStyle(
                 color: goalColors[i],
                 fontSize: 12,
@@ -2196,7 +2567,8 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         ],
       ),
     ),
-  );
+    );
+  }
   List<Widget> goals() {
     if (period == 'Clinician') {
       return [
@@ -2222,7 +2594,9 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
     }
     return [
       mountainGreeting(
-        'Keep it up, Umar!',
+        AppSessionCubit.instance.name.trim().isEmpty
+            ? 'Keep it up!'
+            : 'Keep it up, ${AppSessionCubit.instance.name.trim().split(' ').first}!',
         'Progress towards your daily goals.',
       ),
       gap(),
@@ -2391,7 +2765,12 @@ class _BeamHealthPageState extends State<BeamHealthPage> {
         (goalIcons[i], targetValue(i), 'Current target', goalColors[i]),
         (
           goalIcons[i],
-          ['8,560', '78', '7h 24m', '6'][i],
+          [
+            _fmt(_weekSteps.reduce((a, b) => a + b) / 7),
+            '0',
+            _averageSleep == null ? '--' : _dur(_averageSleep!),
+            '0',
+          ][i],
           'Current average',
           goalColors[i],
         ),
